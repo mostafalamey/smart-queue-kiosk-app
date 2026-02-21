@@ -22,7 +22,38 @@ const readStoredConfig = () => {
 };
 
 const saveConfig = (config) => {
-  window.localStorage.setItem(KIOSK_CONFIG_STORAGE_KEY, JSON.stringify(config));
+  try {
+    window.localStorage.setItem(KIOSK_CONFIG_STORAGE_KEY, JSON.stringify(config));
+    return {
+      saved: true,
+      message: null,
+    };
+  } catch (error) {
+    console.error(
+      "Failed to save config",
+      KIOSK_CONFIG_STORAGE_KEY,
+      error,
+      config
+    );
+
+    try {
+      window.sessionStorage.setItem(
+        KIOSK_CONFIG_STORAGE_KEY,
+        JSON.stringify(config)
+      );
+      return {
+        saved: true,
+        message:
+          "Configuration was saved to temporary session storage. Please check kiosk browser storage permissions.",
+      };
+    } catch {
+      return {
+        saved: false,
+        message:
+          "Unable to save kiosk configuration. Please enable browser storage and try again.",
+      };
+    }
+  }
 };
 
 export const App = () => {
@@ -35,6 +66,7 @@ export const App = () => {
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [printablePayload, setPrintablePayload] = useState(null);
+  const [configPersistenceMessage, setConfigPersistenceMessage] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   const mode = kioskConfig?.mode ?? "reception";
@@ -72,18 +104,24 @@ export const App = () => {
     }
 
     const load = async () => {
-      const departmentRows = await kioskDataProvider.listDepartments();
-      const filtered = isDepartmentLocked
-        ? departmentRows.filter(
-            (department) => department.id === kioskConfig.lockedDepartmentId
-          )
-        : departmentRows;
+      try {
+        const departmentRows = await kioskDataProvider.listDepartments();
+        const filtered = isDepartmentLocked
+          ? departmentRows.filter(
+              (department) => department.id === kioskConfig.lockedDepartmentId
+            )
+          : departmentRows;
 
-      setDepartments(filtered);
+        setDepartments(filtered);
 
-      const initialDepartmentId =
-        filtered[0]?.id ?? kioskConfig.lockedDepartmentId ?? "";
-      setSelectedDepartmentId(initialDepartmentId);
+        const initialDepartmentId =
+          filtered[0]?.id ?? kioskConfig.lockedDepartmentId ?? "";
+        setSelectedDepartmentId(initialDepartmentId);
+      } catch (error) {
+        console.error("Failed to load departments", error);
+        setDepartments([]);
+        setSelectedDepartmentId("");
+      }
     };
 
     void load();
@@ -150,7 +188,13 @@ export const App = () => {
       return;
     }
 
-    saveConfig(kioskConfig);
+    const saveResult = saveConfig(kioskConfig);
+    setConfigPersistenceMessage(saveResult.message);
+
+    if (!saveResult.saved) {
+      return;
+    }
+
     setIsConfigMode(false);
   };
 
@@ -167,6 +211,10 @@ export const App = () => {
         </header>
 
         <section className="card">
+          {configPersistenceMessage && (
+            <section className="banner banner--error">{configPersistenceMessage}</section>
+          )}
+
           <form onSubmit={onConfigSubmit}>
             <label>
               Kiosk Mode
@@ -308,6 +356,10 @@ export const App = () => {
       <section className={`banner banner--error ${isBackendHealthy ? "hidden" : ""}`}>
         Backend is unavailable. Ticket issuance is disabled.
       </section>
+
+      {configPersistenceMessage && (
+        <section className="banner banner--error">{configPersistenceMessage}</section>
+      )}
 
       <section className="card">
         <h2>Issue Ticket</h2>
