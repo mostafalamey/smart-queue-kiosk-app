@@ -34,3 +34,4 @@ npm run start
   - `mock` provider for current development
   - `http` provider for backend integration
 - The app never connects directly to PostgreSQL.
+- Ticket printing runs through an Electron IPC bridge and sends jobs silently to the selected Windows printer.

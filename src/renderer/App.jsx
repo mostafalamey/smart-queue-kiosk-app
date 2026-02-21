@@ -135,6 +135,7 @@ export const App = () => {
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [printablePayload, setPrintablePayload] = useState(null);
+  const [ticketPrintMessage, setTicketPrintMessage] = useState(null);
   const [configPersistenceMessage, setConfigPersistenceMessage] = useState(null);
   const [printerMessage, setPrinterMessage] = useState(null);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -674,13 +675,14 @@ export const App = () => {
 
     try {
       setSubmitting(true);
+      setTicketPrintMessage(null);
       const issued = await kioskDataProvider.issueTicket({
         departmentId: effectiveDepartmentId,
         serviceId: selectedServiceId,
         phoneNumber: phoneNumber.trim(),
       });
 
-      setPrintablePayload({
+      const payload = {
         ticketNumber: issued.ticket.ticketNumber,
         phoneNumber: issued.ticket.phoneNumber,
         departmentId: issued.ticket.departmentId,
@@ -688,7 +690,23 @@ export const App = () => {
         queueSnapshot: issued.queueSnapshot,
         whatsappOptInQrUrl: issued.whatsappOptInQrUrl,
         issuedAt: issued.issuedAt,
-      });
+      };
+
+      setPrintablePayload(payload);
+
+      if (typeof window.kioskRuntime?.printTicket === "function") {
+        const printResult = await window.kioskRuntime.printTicket({
+          printerName: kioskConfig.printerName,
+          payload,
+        });
+
+        if (!printResult?.ok) {
+          setTicketPrintMessage(
+            printResult?.error ||
+              "Ticket was issued, but printing failed. Please check printer settings."
+          );
+        }
+      }
 
       setPhoneNumber("");
     } finally {
@@ -766,6 +784,9 @@ export const App = () => {
       {printablePayload && (
         <section className="card">
           <h2>Print Payload Preview</h2>
+          {ticketPrintMessage && (
+            <section className="banner banner--error">{ticketPrintMessage}</section>
+          )}
           <pre>{JSON.stringify(printablePayload, null, 2)}</pre>
         </section>
       )}
