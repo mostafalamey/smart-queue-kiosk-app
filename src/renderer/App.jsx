@@ -44,23 +44,46 @@ const parseStoredConfig = (value) => {
 };
 
 const readStoredConfig = () => {
-  try {
-    const raw = window.localStorage.getItem(KIOSK_CONFIG_STORAGE_KEY);
+  const parseAndValidate = (raw) => {
     if (!raw) {
       return null;
     }
 
-    const parsed = JSON.parse(raw);
-    const validated = parseStoredConfig(parsed);
-    if (!validated) {
-      console.warn("Ignoring invalid stored kiosk config", KIOSK_CONFIG_STORAGE_KEY);
+    try {
+      const parsed = JSON.parse(raw);
+      const validated = parseStoredConfig(parsed);
+      if (!validated) {
+        console.warn("Ignoring invalid stored kiosk config", KIOSK_CONFIG_STORAGE_KEY);
+        return null;
+      }
+
+      return validated;
+    } catch {
       return null;
     }
+  };
 
-    return validated;
+  let localRaw = null;
+  let sessionRaw = null;
+
+  try {
+    localRaw = window.localStorage.getItem(KIOSK_CONFIG_STORAGE_KEY);
   } catch {
-    return null;
+    localRaw = null;
   }
+
+  const localValidated = parseAndValidate(localRaw);
+  if (localValidated) {
+    return localValidated;
+  }
+
+  try {
+    sessionRaw = window.sessionStorage.getItem(KIOSK_CONFIG_STORAGE_KEY);
+  } catch {
+    sessionRaw = null;
+  }
+
+  return parseAndValidate(sessionRaw);
 };
 
 const saveConfig = (config) => {
@@ -160,7 +183,9 @@ export const App = () => {
         setDepartments(filtered);
 
         const initialDepartmentId =
-          filtered[0]?.id ?? kioskConfig.lockedDepartmentId ?? "";
+          filtered[0]?.id ??
+          (isDepartmentLocked ? kioskConfig.lockedDepartmentId : "") ??
+          "";
         setSelectedDepartmentId(initialDepartmentId);
       } catch (error) {
         console.error("Failed to load departments", error);
@@ -184,11 +209,17 @@ export const App = () => {
     }
 
     const loadServices = async () => {
-      const serviceRows = await kioskDataProvider.listServicesByDepartment(
-        effectiveDepartmentId
-      );
-      setServices(serviceRows);
-      setSelectedServiceId(serviceRows[0]?.id ?? "");
+      try {
+        const serviceRows = await kioskDataProvider.listServicesByDepartment(
+          effectiveDepartmentId
+        );
+        setServices(serviceRows);
+        setSelectedServiceId(serviceRows[0]?.id ?? "");
+      } catch (error) {
+        console.error("Failed to load services", error);
+        setServices([]);
+        setSelectedServiceId("");
+      }
     };
 
     void loadServices();
