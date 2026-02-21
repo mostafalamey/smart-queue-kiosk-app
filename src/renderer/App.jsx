@@ -3,6 +3,46 @@ import { createKioskDataProvider, getDefaultKioskConfig } from "./data/provider"
 
 const KIOSK_CONFIG_STORAGE_KEY = "smartQueue.kiosk.config.v1";
 
+const isRecord = (value) => {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+};
+
+const parseStoredConfig = (value) => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const useMockApi = value.useMockApi;
+  const apiBaseUrl = value.apiBaseUrl;
+  const mode = value.mode;
+  const lockedDepartmentId = value.lockedDepartmentId;
+  const language = value.language;
+  const printerName = value.printerName;
+
+  const hasValidShape =
+    typeof useMockApi === "boolean" &&
+    typeof apiBaseUrl === "string" &&
+    apiBaseUrl.trim().length > 0 &&
+    (mode === "reception" || mode === "department-locked") &&
+    typeof lockedDepartmentId === "string" &&
+    lockedDepartmentId.trim().length > 0 &&
+    (language === "en" || language === "ar") &&
+    typeof printerName === "string";
+
+  if (!hasValidShape) {
+    return null;
+  }
+
+  return {
+    useMockApi,
+    apiBaseUrl: apiBaseUrl.trim(),
+    mode,
+    lockedDepartmentId: lockedDepartmentId.trim(),
+    language,
+    printerName,
+  };
+};
+
 const readStoredConfig = () => {
   try {
     const raw = window.localStorage.getItem(KIOSK_CONFIG_STORAGE_KEY);
@@ -11,11 +51,13 @@ const readStoredConfig = () => {
     }
 
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") {
+    const validated = parseStoredConfig(parsed);
+    if (!validated) {
+      console.warn("Ignoring invalid stored kiosk config", KIOSK_CONFIG_STORAGE_KEY);
       return null;
     }
 
-    return parsed;
+    return validated;
   } catch {
     return null;
   }
@@ -58,7 +100,9 @@ const saveConfig = (config) => {
 
 export const App = () => {
   const [kioskConfig, setKioskConfig] = useState(null);
+  const [previousKioskConfig, setPreviousKioskConfig] = useState(null);
   const [isConfigMode, setIsConfigMode] = useState(false);
+  const [dataReloadKey, setDataReloadKey] = useState(0);
   const [isBackendHealthy, setIsBackendHealthy] = useState(true);
   const [departments, setDepartments] = useState([]);
   const [services, setServices] = useState([]);
@@ -67,6 +111,7 @@ export const App = () => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [printablePayload, setPrintablePayload] = useState(null);
   const [configPersistenceMessage, setConfigPersistenceMessage] = useState(null);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const mode = kioskConfig?.mode ?? "reception";
@@ -99,7 +144,7 @@ export const App = () => {
   }, [isDepartmentLocked, kioskConfig?.lockedDepartmentId, selectedDepartmentId]);
 
   useEffect(() => {
-    if (!kioskConfig) {
+    if (!kioskConfig || isConfigMode) {
       return;
     }
 
@@ -125,9 +170,13 @@ export const App = () => {
     };
 
     void load();
-  }, [kioskConfig, kioskDataProvider, isDepartmentLocked, kioskConfig?.lockedDepartmentId]);
+  }, [kioskConfig, isDepartmentLocked, isConfigMode, dataReloadKey]);
 
   useEffect(() => {
+    if (isConfigMode) {
+      return;
+    }
+
     if (!effectiveDepartmentId) {
       setServices([]);
       setSelectedServiceId("");
@@ -143,10 +192,10 @@ export const App = () => {
     };
 
     void loadServices();
-  }, [effectiveDepartmentId]);
+  }, [effectiveDepartmentId, kioskDataProvider, isConfigMode, dataReloadKey]);
 
   useEffect(() => {
-    if (!kioskConfig) {
+    if (!kioskConfig || isConfigMode) {
       return;
     }
 
@@ -180,11 +229,81 @@ export const App = () => {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
     };
-  }, [kioskConfig, kioskDataProvider]);
+  }, [kioskConfig, kioskDataProvider, isConfigMode]);
 
-  const onConfigSubmit = (event) => {
+  const testServerConnection = async (config) => {
+    if (config.useMockApi) {
+      return true;
+    }
+
+    const normalizedApiBaseUrl = config.apiBaseUrl.trim();
+    if (!normalizedApiBaseUrl) {
+      setConfigPersistenceMessage("Server URL is required when Use Mock API is disabled.");
+      return false;
+    }
+
+    const controller = new AbortController();
+    const timeoutHandle = window.setTimeout(() => {
+      controller.abort();
+    }, 5000);
+
+    try {
+      const response = await fetch(`${normalizedApiBaseUrl}/health`, {
+        method: "GET",
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        setConfigPersistenceMessage(
+          "Unable to connect to the server URL. Please verify the address and backend health endpoint."
+        );
+        return false;
+      }
+
+      setConfigPersistenceMessage(null);
+      return true;
+    } catch (error) {
+      console.error("Failed to test kiosk server connection", error);
+      setConfigPersistenceMessage(
+        "Unable to connect to the server URL. Please verify network access and try again."
+      );
+      return false;
+    } finally {
+      window.clearTimeout(timeoutHandle);
+    }
+  };
+
+  const onTestConnection = async () => {
+    if (!kioskConfig || kioskConfig.useMockApi || isTestingConnection) {
+      return;
+    }
+
+    setIsTestingConnection(true);
+    await testServerConnection(kioskConfig);
+    setIsTestingConnection(false);
+  };
+
+  const onConfigSubmit = async (event) => {
     event.preventDefault();
-    if (!kioskConfig) {
+    if (!kioskConfig || isTestingConnection) {
+      return;
+    }
+
+    if (
+      kioskConfig.mode === "department-locked" &&
+      kioskConfig.lockedDepartmentId.trim().length === 0
+    ) {
+      setConfigPersistenceMessage(
+        "Locked Department ID is required when kiosk mode is Department-Locked."
+      );
+      return;
+    }
+
+    setIsTestingConnection(true);
+    const isConnectionValid = await testServerConnection(kioskConfig);
+    setIsTestingConnection(false);
+
+    if (!isConnectionValid) {
       return;
     }
 
@@ -195,7 +314,34 @@ export const App = () => {
       return;
     }
 
+    setDepartments([]);
+    setServices([]);
+    setSelectedDepartmentId("");
+    setSelectedServiceId("");
+    setPreviousKioskConfig(null);
     setIsConfigMode(false);
+    setDataReloadKey((current) => current + 1);
+  };
+
+  const onCancelConfig = () => {
+    if (!previousKioskConfig) {
+      return;
+    }
+
+    setKioskConfig(previousKioskConfig);
+    setPreviousKioskConfig(null);
+    setConfigPersistenceMessage(null);
+    setIsConfigMode(false);
+  };
+
+  const onOpenSettings = () => {
+    if (!kioskConfig) {
+      return;
+    }
+
+    setPreviousKioskConfig({ ...kioskConfig });
+    setConfigPersistenceMessage(null);
+    setIsConfigMode(true);
   };
 
   if (!kioskConfig) {
@@ -236,7 +382,8 @@ export const App = () => {
               Server URL
               <input
                 type="url"
-                required
+                required={!kioskConfig.useMockApi}
+                disabled={kioskConfig.useMockApi}
                 value={kioskConfig.apiBaseUrl}
                 onChange={(event) =>
                   setKioskConfig((current) => ({
@@ -247,19 +394,22 @@ export const App = () => {
               />
             </label>
 
-            <label>
-              Locked Department ID
-              <input
-                type="text"
-                value={kioskConfig.lockedDepartmentId}
-                onChange={(event) =>
-                  setKioskConfig((current) => ({
-                    ...current,
-                    lockedDepartmentId: event.target.value,
-                  }))
-                }
-              />
-            </label>
+            {kioskConfig.mode === "department-locked" && (
+              <label>
+                Locked Department ID
+                <input
+                  type="text"
+                  required
+                  value={kioskConfig.lockedDepartmentId}
+                  onChange={(event) =>
+                    setKioskConfig((current) => ({
+                      ...current,
+                      lockedDepartmentId: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+            )}
 
             <label>
               Language
@@ -305,7 +455,20 @@ export const App = () => {
               Use Mock API
             </label>
 
-            <button type="submit">Save Configuration</button>
+            {!kioskConfig.useMockApi && (
+              <button type="button" onClick={onTestConnection} disabled={isTestingConnection}>
+                {isTestingConnection ? "Testing..." : "Test Connection"}
+              </button>
+            )}
+
+            <button type="submit" disabled={isTestingConnection}>
+              {isTestingConnection ? "Testing..." : "Save Configuration"}
+            </button>
+            {previousKioskConfig && (
+              <button type="button" onClick={onCancelConfig}>
+                Cancel
+              </button>
+            )}
           </form>
         </section>
       </main>
@@ -348,7 +511,7 @@ export const App = () => {
       <header className="header">
         <h1>Smart Queue Kiosk</h1>
         <p>Mode: {isDepartmentLocked ? "Department-Locked" : "Reception"}</p>
-        <button type="button" onClick={() => setIsConfigMode(true)}>
+        <button type="button" onClick={onOpenSettings}>
           Open Settings
         </button>
       </header>
