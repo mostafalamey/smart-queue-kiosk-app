@@ -6,11 +6,13 @@ ipcMain.handle("kiosk:listPrinters", async (event) => {
     const printers = await event.sender.getPrintersAsync();
 
     return printers
+      // Electron v36+ may omit `isDefault`/`status` on some platforms/builds,
+      // so we normalize to safe fallback values for renderer consumers.
       .map((printer) => ({
         name: printer.name,
         displayName: printer.displayName || printer.name,
-        isDefault: Boolean(printer.isDefault),
-        status: printer.status,
+        isDefault: Boolean(printer?.isDefault ?? false),
+        status: printer?.status ?? null,
       }))
       .sort((a, b) => {
         if (a.isDefault && !b.isDefault) {

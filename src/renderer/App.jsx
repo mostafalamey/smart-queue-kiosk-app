@@ -221,16 +221,25 @@ export const App = () => {
           const hasExistingSelection = departmentRows.some(
             (department) => department.id === kioskConfig.lockedDepartmentId
           );
+          const candidateId = departmentRows[0]?.id ?? "";
 
-          if (!hasExistingSelection) {
+          if (
+            !hasExistingSelection &&
+            departmentRows.length > 0 &&
+            candidateId !== kioskConfig.lockedDepartmentId
+          ) {
             setKioskConfig((current) => {
               if (!current) {
                 return current;
               }
 
+              if (candidateId === current.lockedDepartmentId) {
+                return current;
+              }
+
               return {
                 ...current,
-                lockedDepartmentId: departmentRows[0]?.id ?? "",
+                lockedDepartmentId: candidateId,
               };
             });
           }
@@ -249,12 +258,10 @@ export const App = () => {
       isDisposed = true;
     };
   }, [
-    kioskConfig,
     isConfigMode,
     kioskConfig?.mode,
     kioskConfig?.useMockApi,
     kioskConfig?.apiBaseUrl,
-    kioskDataProvider,
   ]);
 
   const loadWizardPrinters = async () => {
@@ -441,20 +448,20 @@ export const App = () => {
 
     if (
       kioskConfig.mode === "department-locked" &&
-      kioskConfig.lockedDepartmentId.trim().length === 0
+      wizardDepartments.length === 0
     ) {
       setConfigPersistenceMessage(
-        "Locked Department ID is required when kiosk mode is Department-Locked."
+        "No departments are available for Department-Locked mode. Please verify department data source and try again."
       );
       return;
     }
 
     if (
       kioskConfig.mode === "department-locked" &&
-      wizardDepartments.length === 0
+      kioskConfig.lockedDepartmentId.trim().length === 0
     ) {
       setConfigPersistenceMessage(
-        "No departments are available for Department-Locked mode. Please verify department data source and try again."
+        "Locked Department ID is required when kiosk mode is Department-Locked."
       );
       return;
     }
