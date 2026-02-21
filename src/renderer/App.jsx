@@ -128,13 +128,17 @@ export const App = () => {
   const [dataReloadKey, setDataReloadKey] = useState(0);
   const [isBackendHealthy, setIsBackendHealthy] = useState(true);
   const [departments, setDepartments] = useState([]);
+  const [wizardDepartments, setWizardDepartments] = useState([]);
+  const [wizardPrinters, setWizardPrinters] = useState([]);
   const [services, setServices] = useState([]);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [printablePayload, setPrintablePayload] = useState(null);
   const [configPersistenceMessage, setConfigPersistenceMessage] = useState(null);
+  const [printerMessage, setPrinterMessage] = useState(null);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [isLoadingPrinters, setIsLoadingPrinters] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const mode = kioskConfig?.mode ?? "reception";
@@ -196,6 +200,121 @@ export const App = () => {
 
     void load();
   }, [kioskConfig, isDepartmentLocked, isConfigMode, dataReloadKey]);
+
+  useEffect(() => {
+    if (!kioskConfig || !isConfigMode) {
+      return;
+    }
+
+    let isDisposed = false;
+
+    const loadWizardDepartments = async () => {
+      try {
+        const departmentRows = await kioskDataProvider.listDepartments();
+        if (isDisposed) {
+          return;
+        }
+
+        setWizardDepartments(departmentRows);
+
+        if (kioskConfig.mode === "department-locked") {
+          const hasExistingSelection = departmentRows.some(
+            (department) => department.id === kioskConfig.lockedDepartmentId
+          );
+
+          if (!hasExistingSelection) {
+            setKioskConfig((current) => {
+              if (!current) {
+                return current;
+              }
+
+              return {
+                ...current,
+                lockedDepartmentId: departmentRows[0]?.id ?? "",
+              };
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load wizard departments", error);
+        if (!isDisposed) {
+          setWizardDepartments([]);
+        }
+      }
+    };
+
+    void loadWizardDepartments();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [
+    kioskConfig,
+    isConfigMode,
+    kioskConfig?.mode,
+    kioskConfig?.useMockApi,
+    kioskConfig?.apiBaseUrl,
+    kioskDataProvider,
+  ]);
+
+  const loadWizardPrinters = async () => {
+    if (typeof window.kioskRuntime?.listPrinters !== "function") {
+      setWizardPrinters([]);
+      setPrinterMessage(
+        "Printer discovery is unavailable in this runtime. Run inside Electron to list Windows printers."
+      );
+      return;
+    }
+
+    setIsLoadingPrinters(true);
+
+    try {
+      const printers = await window.kioskRuntime.listPrinters();
+      setWizardPrinters(printers);
+
+      if (printers.length === 0) {
+        setPrinterMessage("No printers detected from Windows Print Services.");
+      } else {
+        setPrinterMessage(null);
+      }
+
+      setKioskConfig((current) => {
+        if (!current || printers.length === 0) {
+          return current;
+        }
+
+        const hasCurrentSelection = printers.some(
+          (printer) => printer.name === current.printerName
+        );
+
+        if (hasCurrentSelection) {
+          return current;
+        }
+
+        const defaultPrinter =
+          printers.find((printer) => printer.isDefault) ?? printers[0];
+
+        return {
+          ...current,
+          printerName: defaultPrinter?.name ?? "",
+        };
+      });
+    } catch (error) {
+      console.error("Failed to load wizard printers", error);
+      setWizardPrinters([]);
+      setPrinterMessage("Failed to load system printers. Please retry.");
+    } finally {
+      setIsLoadingPrinters(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isConfigMode) {
+      return;
+    }
+
+    void loadWizardPrinters();
+  }, [isConfigMode]);
 
   useEffect(() => {
     if (isConfigMode) {
@@ -330,6 +449,16 @@ export const App = () => {
       return;
     }
 
+    if (
+      kioskConfig.mode === "department-locked" &&
+      wizardDepartments.length === 0
+    ) {
+      setConfigPersistenceMessage(
+        "No departments are available for Department-Locked mode. Please verify department data source and try again."
+      );
+      return;
+    }
+
     setIsTestingConnection(true);
     const isConnectionValid = await testServerConnection(kioskConfig);
     setIsTestingConnection(false);
@@ -428,9 +557,9 @@ export const App = () => {
             {kioskConfig.mode === "department-locked" && (
               <label>
                 Locked Department ID
-                <input
-                  type="text"
+                <select
                   required
+                  disabled={wizardDepartments.length === 0}
                   value={kioskConfig.lockedDepartmentId}
                   onChange={(event) =>
                     setKioskConfig((current) => ({
@@ -438,7 +567,16 @@ export const App = () => {
                       lockedDepartmentId: event.target.value,
                     }))
                   }
-                />
+                >
+                  {wizardDepartments.length === 0 && (
+                    <option value="">No departments available</option>
+                  )}
+                  {wizardDepartments.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.name}
+                    </option>
+                  ))}
+                </select>
               </label>
             )}
 
@@ -459,18 +597,32 @@ export const App = () => {
             </label>
 
             <label>
-              Default Printer Name
-              <input
-                type="text"
+              Default Printer
+              <select
                 value={kioskConfig.printerName}
+                disabled={isLoadingPrinters || wizardPrinters.length === 0}
                 onChange={(event) =>
                   setKioskConfig((current) => ({
                     ...current,
                     printerName: event.target.value,
                   }))
                 }
-              />
+              >
+                {wizardPrinters.length === 0 && <option value="">No printers available</option>}
+                {wizardPrinters.map((printer) => (
+                  <option key={printer.name} value={printer.name}>
+                    {printer.displayName}
+                    {printer.isDefault ? " (Default)" : ""}
+                  </option>
+                ))}
+              </select>
             </label>
+
+            {printerMessage && <section className="banner banner--error">{printerMessage}</section>}
+
+            <button type="button" onClick={loadWizardPrinters} disabled={isLoadingPrinters}>
+              {isLoadingPrinters ? "Refreshing Printers..." : "Refresh Printers"}
+            </button>
 
             <label className="checkbox-row">
               <input
