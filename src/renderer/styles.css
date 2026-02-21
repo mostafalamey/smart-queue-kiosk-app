@@ -54,3 +54,14 @@ button {
 .hidden {
   display: none;
 }
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  width: auto;
+  margin-top: 0;
+}

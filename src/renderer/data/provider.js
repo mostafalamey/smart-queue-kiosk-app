@@ -1,5 +1,16 @@
 const runtime = window.kioskRuntime?.config ?? {};
 
+export const getDefaultKioskConfig = () => {
+  return {
+    useMockApi: runtime.useMockApi !== false,
+    apiBaseUrl: runtime.apiBaseUrl || "http://localhost:3000",
+    mode: runtime.defaultMode || "reception",
+    lockedDepartmentId: runtime.lockedDepartmentId || "dept-general",
+    language: "en",
+    printerName: "",
+  };
+};
+
 const mockDepartments = [
   { id: "dept-general", name: "General Medicine" },
   { id: "dept-lab", name: "Laboratory" },
@@ -77,8 +88,10 @@ const createHttpProvider = (baseUrl) => ({
   },
 });
 
-export const kioskDataProvider = runtime.useMockApi
-  ? mockProvider
-  : createHttpProvider(runtime.apiBaseUrl || "http://localhost:3000");
+export const createKioskDataProvider = (config) => {
+  if (config?.useMockApi) {
+    return mockProvider;
+  }
 
-export const kioskRuntimeConfig = runtime;
+  return createHttpProvider(config?.apiBaseUrl || "http://localhost:3000");
+};
