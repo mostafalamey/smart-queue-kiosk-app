@@ -10,4 +10,10 @@ contextBridge.exposeInMainWorld("kioskRuntime", {
   listPrinters: async () => {
     return ipcRenderer.invoke("kiosk:listPrinters");
   },
+  printTicket: async ({ printerName, payload }) => {
+    return ipcRenderer.invoke("kiosk:printTicket", {
+      printerName,
+      payload,
+    });
+  },
 });
