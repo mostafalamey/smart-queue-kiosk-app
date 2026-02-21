@@ -695,15 +695,22 @@ export const App = () => {
       setPrintablePayload(payload);
 
       if (typeof window.kioskRuntime?.printTicket === "function") {
-        const printResult = await window.kioskRuntime.printTicket({
-          printerName: kioskConfig.printerName,
-          payload,
-        });
+        try {
+          const printResult = await window.kioskRuntime.printTicket({
+            printerName: kioskConfig.printerName,
+            payload,
+          });
 
-        if (!printResult?.ok) {
+          if (!printResult?.ok) {
+            setTicketPrintMessage(
+              printResult?.error ||
+                "Ticket was issued, but printing failed. Please check printer settings."
+            );
+          }
+        } catch (error) {
+          console.error("Print invocation failed", error);
           setTicketPrintMessage(
-            printResult?.error ||
-              "Ticket was issued, but printing failed. Please check printer settings."
+            "Ticket was issued, but printing failed. Please check printer settings."
           );
         }
       }

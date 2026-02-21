@@ -106,6 +106,20 @@ ipcMain.handle("kiosk:printTicket", async (_event, request) => {
     );
 
     await new Promise((resolve, reject) => {
+      let isSettled = false;
+      const timeoutHandle = setTimeout(() => {
+        if (isSettled) {
+          return;
+        }
+
+        isSettled = true;
+        if (!printWindow.isDestroyed()) {
+          printWindow.destroy();
+        }
+
+        reject(new Error("Print operation timed out after 30 seconds."));
+      }, 30_000);
+
       printWindow.webContents.print(
         {
           silent: true,
@@ -113,7 +127,18 @@ ipcMain.handle("kiosk:printTicket", async (_event, request) => {
           deviceName: printerName,
         },
         (success, failureReason) => {
+          if (isSettled) {
+            return;
+          }
+
+          isSettled = true;
+          clearTimeout(timeoutHandle);
+
           if (!success) {
+            if (!printWindow.isDestroyed()) {
+              printWindow.close();
+            }
+
             reject(new Error(failureReason || "Print job failed."));
             return;
           }
