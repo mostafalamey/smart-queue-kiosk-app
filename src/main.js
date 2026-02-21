@@ -1,5 +1,35 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("node:path");
+
+ipcMain.handle("kiosk:listPrinters", async (event) => {
+  try {
+    const printers = await event.sender.getPrintersAsync();
+
+    return printers
+      // Electron v36+ may omit `isDefault`/`status` on some platforms/builds,
+      // so we normalize to safe fallback values for renderer consumers.
+      .map((printer) => ({
+        name: printer.name,
+        displayName: printer.displayName || printer.name,
+        isDefault: Boolean(printer?.isDefault ?? false),
+        status: printer?.status ?? null,
+      }))
+      .sort((a, b) => {
+        if (a.isDefault && !b.isDefault) {
+          return -1;
+        }
+
+        if (!a.isDefault && b.isDefault) {
+          return 1;
+        }
+
+        return a.displayName.localeCompare(b.displayName);
+      });
+  } catch (error) {
+    console.error("Failed to list system printers", error);
+    return [];
+  }
+});
 
 const createWindow = () => {
   const window = new BrowserWindow({
