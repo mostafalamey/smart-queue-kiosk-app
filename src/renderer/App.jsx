@@ -1,7 +1,33 @@
 import { useEffect, useMemo, useState } from "react";
-import { kioskDataProvider, kioskRuntimeConfig } from "./data/provider";
+import { createKioskDataProvider, getDefaultKioskConfig } from "./data/provider";
+
+const KIOSK_CONFIG_STORAGE_KEY = "smartQueue.kiosk.config.v1";
+
+const readStoredConfig = () => {
+  try {
+    const raw = window.localStorage.getItem(KIOSK_CONFIG_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const saveConfig = (config) => {
+  window.localStorage.setItem(KIOSK_CONFIG_STORAGE_KEY, JSON.stringify(config));
+};
 
 export const App = () => {
+  const [kioskConfig, setKioskConfig] = useState(null);
+  const [isConfigMode, setIsConfigMode] = useState(false);
   const [isBackendHealthy, setIsBackendHealthy] = useState(true);
   const [departments, setDepartments] = useState([]);
   const [services, setServices] = useState([]);
@@ -11,35 +37,57 @@ export const App = () => {
   const [printablePayload, setPrintablePayload] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const mode = kioskRuntimeConfig.defaultMode ?? "reception";
+  const mode = kioskConfig?.mode ?? "reception";
   const isDepartmentLocked = mode === "department-locked";
+  const kioskDataProvider = useMemo(
+    () => createKioskDataProvider(kioskConfig ?? getDefaultKioskConfig()),
+    [kioskConfig]
+  );
+
+  useEffect(() => {
+    const stored = readStoredConfig();
+    if (stored) {
+      setKioskConfig({
+        ...getDefaultKioskConfig(),
+        ...stored,
+      });
+      return;
+    }
+
+    setIsConfigMode(true);
+    setKioskConfig(getDefaultKioskConfig());
+  }, []);
 
   const effectiveDepartmentId = useMemo(() => {
     if (isDepartmentLocked) {
-      return kioskRuntimeConfig.lockedDepartmentId;
+      return kioskConfig?.lockedDepartmentId;
     }
 
     return selectedDepartmentId;
-  }, [isDepartmentLocked, selectedDepartmentId]);
+  }, [isDepartmentLocked, kioskConfig?.lockedDepartmentId, selectedDepartmentId]);
 
   useEffect(() => {
+    if (!kioskConfig) {
+      return;
+    }
+
     const load = async () => {
       const departmentRows = await kioskDataProvider.listDepartments();
       const filtered = isDepartmentLocked
         ? departmentRows.filter(
-            (department) => department.id === kioskRuntimeConfig.lockedDepartmentId
+            (department) => department.id === kioskConfig.lockedDepartmentId
           )
         : departmentRows;
 
       setDepartments(filtered);
 
       const initialDepartmentId =
-        filtered[0]?.id ?? kioskRuntimeConfig.lockedDepartmentId ?? "";
+        filtered[0]?.id ?? kioskConfig.lockedDepartmentId ?? "";
       setSelectedDepartmentId(initialDepartmentId);
     };
 
     void load();
-  }, [isDepartmentLocked]);
+  }, [kioskConfig, kioskDataProvider, isDepartmentLocked, kioskConfig?.lockedDepartmentId]);
 
   useEffect(() => {
     if (!effectiveDepartmentId) {
@@ -60,6 +108,10 @@ export const App = () => {
   }, [effectiveDepartmentId]);
 
   useEffect(() => {
+    if (!kioskConfig) {
+      return;
+    }
+
     const checkHealth = async () => {
       if (!navigator.onLine) {
         setIsBackendHealthy(false);
@@ -90,7 +142,127 @@ export const App = () => {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
     };
-  }, []);
+  }, [kioskConfig, kioskDataProvider]);
+
+  const onConfigSubmit = (event) => {
+    event.preventDefault();
+    if (!kioskConfig) {
+      return;
+    }
+
+    saveConfig(kioskConfig);
+    setIsConfigMode(false);
+  };
+
+  if (!kioskConfig) {
+    return null;
+  }
+
+  if (isConfigMode) {
+    return (
+      <main className="container">
+        <header className="header">
+          <h1>Smart Queue Kiosk Setup</h1>
+          <p>First-run configuration wizard</p>
+        </header>
+
+        <section className="card">
+          <form onSubmit={onConfigSubmit}>
+            <label>
+              Kiosk Mode
+              <select
+                value={kioskConfig.mode}
+                onChange={(event) =>
+                  setKioskConfig((current) => ({
+                    ...current,
+                    mode: event.target.value,
+                  }))
+                }
+              >
+                <option value="reception">Reception</option>
+                <option value="department-locked">Department-Locked</option>
+              </select>
+            </label>
+
+            <label>
+              Server URL
+              <input
+                type="url"
+                required
+                value={kioskConfig.apiBaseUrl}
+                onChange={(event) =>
+                  setKioskConfig((current) => ({
+                    ...current,
+                    apiBaseUrl: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label>
+              Locked Department ID
+              <input
+                type="text"
+                value={kioskConfig.lockedDepartmentId}
+                onChange={(event) =>
+                  setKioskConfig((current) => ({
+                    ...current,
+                    lockedDepartmentId: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label>
+              Language
+              <select
+                value={kioskConfig.language}
+                onChange={(event) =>
+                  setKioskConfig((current) => ({
+                    ...current,
+                    language: event.target.value,
+                  }))
+                }
+              >
+                <option value="en">English</option>
+                <option value="ar">Arabic</option>
+              </select>
+            </label>
+
+            <label>
+              Default Printer Name
+              <input
+                type="text"
+                value={kioskConfig.printerName}
+                onChange={(event) =>
+                  setKioskConfig((current) => ({
+                    ...current,
+                    printerName: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={kioskConfig.useMockApi}
+                onChange={(event) =>
+                  setKioskConfig((current) => ({
+                    ...current,
+                    useMockApi: event.target.checked,
+                  }))
+                }
+              />
+              Use Mock API
+            </label>
+
+            <button type="submit">Save Configuration</button>
+          </form>
+        </section>
+      </main>
+    );
+  }
 
   const onIssueTicket = async (event) => {
     event.preventDefault();
@@ -128,6 +300,9 @@ export const App = () => {
       <header className="header">
         <h1>Smart Queue Kiosk</h1>
         <p>Mode: {isDepartmentLocked ? "Department-Locked" : "Reception"}</p>
+        <button type="button" onClick={() => setIsConfigMode(true)}>
+          Open Settings
+        </button>
       </header>
 
       <section className={`banner banner--error ${isBackendHealthy ? "hidden" : ""}`}>
