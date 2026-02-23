@@ -9,6 +9,10 @@ module.exports = async (context) => {
 
   const productFilename = context.packager?.appInfo?.productFilename;
   if (!productFilename || !context.appOutDir) {
+    console.log(
+      "[after-pack] Skipping Windows icon setup because required context values are missing:",
+      { missingProductFilename: !productFilename, missingAppOutDir: !context.appOutDir }
+    );
     return;
   }
 
@@ -16,10 +20,20 @@ module.exports = async (context) => {
   const iconPath = path.join(context.packager.projectDir, "build-resources", "icon.ico");
 
   if (!fs.existsSync(executablePath) || !fs.existsSync(iconPath)) {
+    console.log(
+      "[after-pack] Skipping Windows icon setup because required files are missing:",
+      { missingExecutable: !fs.existsSync(executablePath), missingIcon: !fs.existsSync(iconPath) }
+    );
     return;
   }
 
-  await rcedit(executablePath, {
-    icon: iconPath,
-  });
+  try {
+    await rcedit(executablePath, {
+      icon: iconPath,
+    });
+    console.log(`[after-pack] Icon applied to ${executablePath}`);
+  } catch (error) {
+    console.error(`[after-pack] Failed to apply icon: ${error.message}`);
+    throw error;
+  }
 };

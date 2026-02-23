@@ -225,7 +225,7 @@ ipcMain.handle("kiosk:printTicket", async (_event, request) => {
 const createWindow = () => {
   const packagedIconPath = path.join(process.resourcesPath, "icon.ico");
   const devIconPath = path.join(__dirname, "..", "build-resources", "icon.ico");
-  const legacyDevIconPath = path.join(__dirname, "..", "public", "logo-256.ico");
+  const legacyDevIconPath = path.join(__dirname, "..", "public", "icon.ico");
   const windowIconPath = app.isPackaged
     ? packagedIconPath
     : fs.existsSync(devIconPath)
@@ -264,7 +264,7 @@ const createWindow = () => {
     if (isCloseAppShortcut) {
       event.preventDefault();
       isAppQuitting = true;
-      app.exit(0);
+      app.quit();
     }
   });
 
