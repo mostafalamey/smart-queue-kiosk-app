@@ -19,11 +19,10 @@ This document maps the current implemented patient journey and the target comple
 2. App auto-advances to **Service** step.
 3. Patient selects **Service** card.
 4. App auto-advances to **Phone** step.
-5. Patient taps **Enter Phone Number**.
-6. Phone popup opens (numeric input + Egypt format validation).
-7. Patient submits to issue ticket.
-8. Ticket is issued and print attempt starts.
-9. Result popup appears:
+5. Phone popup opens automatically (numeric input + Egypt format validation).
+6. Patient submits to issue ticket.
+7. Ticket is issued and print attempt starts.
+8. Result popup appears:
    - success: ticket summary + QR + auto-reset timeout,
    - print failed: retry print / start over actions.
 
@@ -32,28 +31,25 @@ This document maps the current implemented patient journey and the target comple
 2. Patient starts at **Service** step.
 3. Patient selects **Service** card.
 4. App auto-advances to **Phone** step.
-5. Patient taps **Enter Phone Number**.
-6. Phone popup opens (numeric input + validation).
-7. Patient submits to issue ticket.
-8. Ticket is issued and print attempt starts.
-9. Result popup appears with success/failure recovery.
+5. Phone popup opens automatically (numeric input + validation).
+6. Patient submits to issue ticket.
+7. Ticket is issued and print attempt starts.
+8. Result popup appears with success/failure recovery.
 
 ## Target Completion Path
 
 ### Reception Mode (Target)
-- Primary taps target: **4-5 taps**
+- Primary taps target: **3-4 taps**
   - Department card tap
   - Service card tap
-  - Enter Phone Number
   - Issue Ticket
   - (optional) Done
 - Completion target: **<= 30-45 seconds** for familiar users.
 - No additional confirmation page is required between steps.
 
 ### Department-Locked Mode (Target)
-- Primary taps target: **3-4 taps**
+- Primary taps target: **2-3 taps**
   - Service card tap
-  - Enter Phone Number
   - Issue Ticket
   - (optional) Done
 - Completion target: **<= 25-40 seconds** for familiar users.

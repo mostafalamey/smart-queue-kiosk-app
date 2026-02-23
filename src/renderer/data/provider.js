@@ -26,11 +26,12 @@ const extractApiErrorMessage = (body, fallback) => {
 
   const candidateMessage =
     body.message ||
-    body.error ||
     body.detail ||
     body?.error?.message ||
     body?.error?.detail ||
-    fallback;
+    (typeof body.error === "string" ? body.error : null) ||
+     fallback;
+
 
   return String(candidateMessage || fallback);
 };

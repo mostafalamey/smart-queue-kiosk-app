@@ -540,12 +540,13 @@ const appendUxMetric = (metricEvent) => {
 
   try {
     window.localStorage.setItem(KIOSK_UX_METRICS_STORAGE_KEY, JSON.stringify(next));
-    return;
+    return next;
   } catch {
     try {
       window.sessionStorage.setItem(KIOSK_UX_METRICS_STORAGE_KEY, JSON.stringify(next));
+      return next;
     } catch {
-      return;
+      return next;
     }
   }
 };
@@ -613,6 +614,11 @@ const calculateUxMetricsSummary = (events) => {
 };
 
 export const App = () => {
+  const createConfigPersistenceMessage = (tone, message) => ({
+    tone,
+    message,
+  });
+
   const [kioskConfig, setKioskConfig] = useState(null);
   const [previousKioskConfig, setPreviousKioskConfig] = useState(null);
   const [isConfigMode, setIsConfigMode] = useState(false);
@@ -679,6 +685,21 @@ export const App = () => {
   const languageToggleLabel = isArabic
     ? uiText.languageToggleToEnglish
     : uiText.languageToggleToArabic;
+  const configPersistenceTone = configPersistenceMessage?.tone ?? "info";
+  const configPersistenceBannerClass =
+    configPersistenceTone === "error"
+      ? "banner--error"
+      : configPersistenceTone === "warning"
+        ? "banner--warning"
+        : "banner--info";
+  const configPersistenceAriaLive =
+    configPersistenceTone === "warning" || configPersistenceTone === "error"
+      ? "assertive"
+      : "polite";
+  const configPersistenceRole =
+    configPersistenceTone === "warning" || configPersistenceTone === "error"
+      ? "alert"
+      : "status";
 
   const trackUxMetric = useCallback(
     (eventName, details = {}) => {
@@ -702,8 +723,8 @@ export const App = () => {
         ...details,
       };
 
-      appendUxMetric(metricEvent);
-      setUxMetricsSummary(calculateUxMetricsSummary(readStoredUxMetrics()));
+      const updatedMetrics = appendUxMetric(metricEvent);
+      setUxMetricsSummary(calculateUxMetricsSummary(updatedMetrics));
     },
     [
       isDepartmentLocked,
@@ -1118,7 +1139,9 @@ export const App = () => {
 
     const normalizedApiBaseUrl = config.apiBaseUrl.trim();
     if (!normalizedApiBaseUrl) {
-      setConfigPersistenceMessage(uiText.serverUrlRequiredWhenNoMock);
+      setConfigPersistenceMessage(
+        createConfigPersistenceMessage("warning", uiText.serverUrlRequiredWhenNoMock)
+      );
       return false;
     }
 
@@ -1134,7 +1157,9 @@ export const App = () => {
       });
 
       if (!response.ok) {
-        setConfigPersistenceMessage(uiText.serverConnectionFailedHealth);
+        setConfigPersistenceMessage(
+          createConfigPersistenceMessage("error", uiText.serverConnectionFailedHealth)
+        );
         return false;
       }
 
@@ -1142,7 +1167,9 @@ export const App = () => {
       return true;
     } catch (error) {
       console.error("Failed to test kiosk server connection", error);
-      setConfigPersistenceMessage(uiText.serverConnectionFailedNetwork);
+      setConfigPersistenceMessage(
+        createConfigPersistenceMessage("error", uiText.serverConnectionFailedNetwork)
+      );
       return false;
     } finally {
       window.clearTimeout(timeoutHandle);
@@ -1151,15 +1178,21 @@ export const App = () => {
 
   const onCopyDeviceId = async () => {
     if (!kioskDeviceId) {
-      setConfigPersistenceMessage(uiText.copyDeviceIdFailed);
+      setConfigPersistenceMessage(
+        createConfigPersistenceMessage("error", uiText.copyDeviceIdFailed)
+      );
       return;
     }
 
     try {
       await navigator.clipboard.writeText(kioskDeviceId);
-      setConfigPersistenceMessage(uiText.copyDeviceIdDone);
+      setConfigPersistenceMessage(
+        createConfigPersistenceMessage("success", uiText.copyDeviceIdDone)
+      );
     } catch {
-      setConfigPersistenceMessage(uiText.copyDeviceIdFailed);
+      setConfigPersistenceMessage(
+        createConfigPersistenceMessage("error", uiText.copyDeviceIdFailed)
+      );
     }
   };
 
@@ -1183,7 +1216,9 @@ export const App = () => {
       kioskConfig.mode === "department-locked" &&
       wizardDepartments.length === 0
     ) {
-      setConfigPersistenceMessage(uiText.noDepartmentsForLocked);
+      setConfigPersistenceMessage(
+        createConfigPersistenceMessage("warning", uiText.noDepartmentsForLocked)
+      );
       return;
     }
 
@@ -1191,7 +1226,9 @@ export const App = () => {
       kioskConfig.mode === "department-locked" &&
       kioskConfig.lockedDepartmentId.trim().length === 0
     ) {
-      setConfigPersistenceMessage(uiText.lockedDepartmentRequired);
+      setConfigPersistenceMessage(
+        createConfigPersistenceMessage("warning", uiText.lockedDepartmentRequired)
+      );
       return;
     }
 
@@ -1204,7 +1241,14 @@ export const App = () => {
     }
 
     const saveResult = saveConfig(kioskConfig);
-    setConfigPersistenceMessage(saveResult.message);
+    setConfigPersistenceMessage(
+      saveResult.message
+        ? createConfigPersistenceMessage(
+            saveResult.saved ? "warning" : "error",
+            saveResult.message
+          )
+        : null
+    );
 
     if (!saveResult.saved) {
       return;
@@ -1239,12 +1283,16 @@ export const App = () => {
     const accessResult = await settingsAccessController.verifyAccess();
 
     if (!accessResult?.allowed) {
-      setConfigPersistenceMessage(uiText.backendUnavailableDescription);
+      setConfigPersistenceMessage(
+        createConfigPersistenceMessage("warning", uiText.backendUnavailableDescription)
+      );
       return;
     }
 
     if (accessResult.deferred) {
-      setConfigPersistenceMessage(uiText.settingsAuthDeferredNotice);
+      setConfigPersistenceMessage(
+        createConfigPersistenceMessage("info", uiText.settingsAuthDeferredNotice)
+      );
     }
 
     setPreviousKioskConfig({ ...kioskConfig });
@@ -1476,8 +1524,8 @@ export const App = () => {
   const runPrintTicket = async (payload) => {
     if (typeof window.kioskRuntime?.printTicket !== "function") {
       return {
-        ok: true,
-        error: null,
+        ok: false,
+        error: printResult?.error || uiText.printFailedDescription,
       };
     }
 
@@ -1633,7 +1681,7 @@ export const App = () => {
     return (
       <main className="kiosk-shell" dir={isArabic ? "rtl" : "ltr"}>
         <header className="kiosk-header settings-header">
-          <div>
+          <div className="settings-header-title">
             <h1>{uiText.setupTitle}</h1>
             <p>{uiText.setupSubtitle}</p>
           </div>
@@ -1648,8 +1696,12 @@ export const App = () => {
 
         <section className="card">
           {configPersistenceMessage && (
-            <section className="banner banner--error" role="alert" aria-live="assertive">
-              {configPersistenceMessage}
+            <section
+              className={`banner ${configPersistenceBannerClass}`}
+              role={configPersistenceRole}
+              aria-live={configPersistenceAriaLive}
+            >
+              {configPersistenceMessage.message}
             </section>
           )}
 
@@ -2021,6 +2073,7 @@ export const App = () => {
       description: uiText.takePrintedTicket,
       printState: uiText.printStateSuccess,
       allowRetryPrint: false,
+      allowStartOver: true,
     });
   };
 
@@ -2059,7 +2112,12 @@ export const App = () => {
             <Printer size={15} aria-hidden="true" />
             {printerStatusLabel}
           </span>
-          <button type="button" className="ghost-button icon-only-button" onClick={onOpenSettings}>
+          <button 
+          type="button" 
+          className="ghost-button icon-only-button" 
+          onClick={onOpenSettings}
+          aria-label={uiText.settings}
+          >
             <Settings size={16} aria-hidden="true" />
           </button>
         </div>
@@ -2082,8 +2140,12 @@ export const App = () => {
       </section>
 
       {configPersistenceMessage && (
-        <section className="banner banner--warning" role="status" aria-live="polite">
-          {configPersistenceMessage}
+        <section
+          className={`banner ${configPersistenceBannerClass}`}
+          role={configPersistenceRole}
+          aria-live={configPersistenceAriaLive}
+        >
+          {configPersistenceMessage.message}
         </section>
       )}
 
