@@ -16,8 +16,8 @@ Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with requir
 
 ## Overall Progress
 - Phase 4 status: **In Progress**
-- Completed checklist items: **12 / 15**
-- Current focus: printer integration and final operational hardening before Phase 4 closure.
+- Completed checklist items: **13 / 15**
+- Current focus: protected settings authorization cutover (backend-ready) and final contract/test hardening before Phase 4 closure.
 
 ## Checklist
 
@@ -57,7 +57,7 @@ Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with requir
 
 ### 6) Remaining Phase 4 Work
 - [x] Real printing integration from Electron wrapper (silent/selected printer path)
-- [ ] Device ID generation/display and persistence for kiosk enrollment flow
+- [x] Device ID generation/display and persistence for kiosk enrollment flow
 - [ ] Protected config access path (Admin/IT/Manager credentials) for post-setup edits
 - [ ] Contract alignment pass against finalized backend kiosk/ticket endpoints
 - [ ] Add focused tests for configuration lifecycle and data-provider switching
@@ -70,8 +70,13 @@ Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with requir
 - Added error handling for department/service loading to prevent stale UI state.
 - Added Windows printer discovery in setup wizard with selectable printer list and refresh action.
 - Added Electron print execution path that sends issued-ticket payload to the selected Windows printer.
+- Added persistent kiosk Device ID generation/display and copy support for mapping workflows.
+- Added diagnostics panel and deferred backend-auth readiness path for settings access.
+- Refined patient flow to one-decision-per-step behavior with card-based selection and reduced tap count.
+- Added local UX baseline instrumentation and in-settings KPI summary for operational baseline capture.
+- Hardened touch/accessibility behavior with larger minimum interactive targets, explicit focus-visible states, and ARIA live semantics for critical status surfaces.
 
 ## Next Recommended Slice
-1. Add kiosk Device ID generation and show it in setup/settings for mapping workflows.
-2. Add protected settings access flow (Admin/IT/Manager credentials) for post-setup edits.
-3. Add minimal test coverage for config save/cancel/reload paths.
+1. Implement protected settings access flow (Admin/IT/Manager credentials) once backend auth endpoints are available.
+2. Run contract alignment pass against finalized backend kiosk/ticket endpoints.
+3. Add minimal focused tests for config lifecycle and data-provider switching paths.
