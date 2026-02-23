@@ -687,10 +687,11 @@ export const App = () => {
   const languageToggleLabel = isArabic
     ? uiText.languageToggleToEnglish
     : uiText.languageToggleToArabic;
+  const appLogoUrl = `${import.meta.env.BASE_URL}logo.svg`;
   const currentYear = new Date().getFullYear();
   const appFooter = (
     <footer className="app-footer" aria-label="Application footer">
-      <img src="/logo.svg" alt="ML Extensions logo" className="app-footer-logo" loading="lazy" />
+      <img src={appLogoUrl} alt="ML Extensions logo" className="app-footer-logo" loading="lazy" />
       <p className="app-footer-text">
         <span className="app-footer-brand">ML Extensions</span>
         <span aria-hidden="true"> • </span>

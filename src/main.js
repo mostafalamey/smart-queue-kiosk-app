@@ -220,7 +220,7 @@ ipcMain.handle("kiosk:printTicket", async (_event, request) => {
 });
 
 const createWindow = () => {
-  const windowIconPath = path.join(__dirname, "..", "public", "icon.ico");
+  const windowIconPath = path.join(__dirname, "..", "public", "logo-256.ico");
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
