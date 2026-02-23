@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { createKioskDataProvider, getDefaultKioskConfig } from "./data/provider";
 import { createSettingsAccessController } from "./data/settings-access";
 import {
@@ -1292,7 +1293,21 @@ export const App = () => {
       return;
     }
 
-    const accessResult = await settingsAccessController.verifyAccess();
+    let accessResult;
+
+    try {
+      accessResult = await settingsAccessController.verifyAccess();
+    } catch (error) {
+      console.error("Failed to verify settings access", error);
+      const errorMessage =
+        typeof error?.message === "string" && error.message.trim().length > 0
+          ? `${uiText.backendUnavailableDescription} (${error.message})`
+          : uiText.backendUnavailableDescription;
+      setConfigPersistenceMessage(
+        createConfigPersistenceMessage("error", errorMessage)
+      );
+      return;
+    }
 
     if (!accessResult?.allowed) {
       setConfigPersistenceMessage(
@@ -1537,7 +1552,7 @@ export const App = () => {
     if (typeof window.kioskRuntime?.printTicket !== "function") {
       return {
         ok: false,
-        error: printResult?.error || uiText.printFailedDescription,
+        error: uiText.printFailedDescription,
       };
     }
 
@@ -2379,13 +2394,12 @@ export const App = () => {
                   <div className="ticket-summary-qr-row">
                     <strong>{uiText.whatsappQrLabel}</strong>
                     <div className="qr-preview-wrap">
-                      <img
+                      <QRCodeSVG
+                        value={printablePayload.whatsappOptInQrUrl}
+                        size={140}
                         className="qr-preview"
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(
-                          printablePayload.whatsappOptInQrUrl
-                        )}`}
-                        alt={uiText.whatsappQrLabel}
-                        loading="lazy"
+                        role="img"
+                        aria-label={uiText.whatsappQrLabel}
                       />
                       <span className="qr-preview-hint">{uiText.whatsappQrHint}</span>
                     </div>

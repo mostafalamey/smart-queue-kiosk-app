@@ -719,10 +719,9 @@ button {
 }
 
 .dial-pad {
-  margin-top: 12px;
   display: grid;
   width: 70%;
-  margin: auto;
+  margin: 12px auto 0;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
