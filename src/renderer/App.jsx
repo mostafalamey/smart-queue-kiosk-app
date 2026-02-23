@@ -654,6 +654,7 @@ export const App = () => {
   const [uxMetricsSummary, setUxMetricsSummary] = useState(() =>
     calculateUxMetricsSummary(readStoredUxMetrics())
   );
+  const phoneInputRef = useRef(null);
   const flowSessionRef = useRef({
     flowId: "",
     startedAt: 0,
@@ -685,6 +686,17 @@ export const App = () => {
   const languageToggleLabel = isArabic
     ? uiText.languageToggleToEnglish
     : uiText.languageToggleToArabic;
+  const currentYear = new Date().getFullYear();
+  const appFooter = (
+    <footer className="app-footer" aria-label="Application footer">
+      <img src="/logo.svg" alt="ML Extensions logo" className="app-footer-logo" loading="lazy" />
+      <p className="app-footer-text">
+        <span className="app-footer-brand">ML Extensions</span>
+        <span aria-hidden="true"> • </span>
+        <span>© {currentYear}</span>
+      </p>
+    </footer>
+  );
   const configPersistenceTone = configPersistenceMessage?.tone ?? "info";
   const configPersistenceBannerClass =
     configPersistenceTone === "error"
@@ -1673,6 +1685,20 @@ export const App = () => {
     selectedServiceId,
   ]);
 
+  useEffect(() => {
+    if (!isPhonePopupOpen) {
+      return;
+    }
+
+    const focusTimeoutHandle = window.setTimeout(() => {
+      phoneInputRef.current?.focus({ preventScroll: true });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(focusTimeoutHandle);
+    };
+  }, [isPhonePopupOpen]);
+
   if (!kioskConfig) {
     return null;
   }
@@ -1950,6 +1976,7 @@ export const App = () => {
             </section>
           </form>
         </section>
+        {appFooter}
       </main>
     );
   }
@@ -2229,9 +2256,11 @@ export const App = () => {
               <label className="phone-popup-label">
                 {uiText.phoneLabel}
                 <input
+                  ref={phoneInputRef}
                   type="tel"
                   inputMode="numeric"
                   placeholder={uiText.phonePlaceholder}
+                  autoFocus
                   required
                   value={phoneNumber}
                   className="phone-popup-input"
@@ -2393,6 +2422,7 @@ export const App = () => {
           </section>
         </section>
       )}
+      {appFooter}
     </main>
   );
 };
