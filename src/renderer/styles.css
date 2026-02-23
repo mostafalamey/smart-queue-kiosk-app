@@ -558,7 +558,7 @@ button {
 }
 
 .phone-popup {
-  width: min(420px, 100%);
+  width: min(460px, 100%);
   border-radius: 18px;
   padding: 24px;
   max-height: 88vh;
@@ -673,7 +673,7 @@ button {
 .field-error {
   margin: 10px 0 0;
   color: #b91c1c;
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -941,6 +941,6 @@ button {
   }
 
   .phone-popup-input {
-    font-size: 34px;
+    font-size: 28px;
   }
 }

@@ -225,6 +225,7 @@ const createWindow = () => {
     width: 1280,
     height: 800,
     kiosk: false,
+    fullscreen: true,
     autoHideMenuBar: true,
     icon: windowIconPath,
     webPreferences: {
@@ -232,6 +233,28 @@ const createWindow = () => {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  window.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") {
+      return;
+    }
+
+    const isExitFullscreenShortcut =
+      input.control && input.shift && input.code === "KeyF";
+    const isCloseAppShortcut =
+      input.control && input.shift && input.code === "KeyQ";
+
+    if (isExitFullscreenShortcut) {
+      event.preventDefault();
+      window.setFullScreen(!window.isFullScreen());
+      return;
+    }
+
+    if (isCloseAppShortcut) {
+      event.preventDefault();
+      app.quit();
+    }
   });
 
   const devServerUrl = process.env.VITE_DEV_SERVER_URL;

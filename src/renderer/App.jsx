@@ -2286,9 +2286,11 @@ export const App = () => {
                 />
               </label>
 
-              <p className="field-hint phone-popup-hint">{uiText.phonePopupDescription}</p>
-
-              {phoneValidationMessage && <p className="field-error">{phoneValidationMessage}</p>}
+              {phoneValidationMessage ? (
+                <p className="field-error">{phoneValidationMessage}</p>
+              ) : (
+                <p className="field-hint phone-popup-hint">{uiText.phonePopupDescription}</p>
+              )}
 
               <section className="dial-pad" aria-label={uiText.phoneLabel}>
                 {[["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["+", "0", "backspace"], ["clear"]]
