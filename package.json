@@ -2,6 +2,7 @@
   "name": "smart-queue-kiosk-app",
   "version": "0.1.0",
   "private": true,
+  "author": "Mostafa Lamey",
   "description": "Smart Queue Kiosk (Electron-wrapped web app)",
   "main": "src/main.js",
   "scripts": {
@@ -12,6 +13,9 @@
     "start": "electron ."
   },
   "dependencies": {
+    "lucide-react": "^0.575.0",
+    "qrcode": "^1.5.4",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

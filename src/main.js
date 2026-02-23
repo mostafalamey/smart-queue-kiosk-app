@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("node:path");
+const QRCode = require("qrcode");
 
 const escapeHtml = (value) => {
   return String(value ?? "")
@@ -10,10 +11,37 @@ const escapeHtml = (value) => {
     .replaceAll("'", "&#39;");
 };
 
-const buildTicketPrintHtml = (payload) => {
+const buildTicketPrintHtml = (payload, qrDataUrl) => {
   const queueSnapshot = payload.queueSnapshot ?? {};
   const peopleAhead =
     queueSnapshot.peopleAhead ?? queueSnapshot.queuePosition ?? "N/A";
+  const whatsappOptInQrUrl = String(payload.whatsappOptInQrUrl ?? "").trim();
+  const hasWhatsappQr = Boolean(whatsappOptInQrUrl) && Boolean(qrDataUrl);
+  const whatsappSectionHtml = hasWhatsappQr
+    ? `
+    <hr />
+    <div class="small strong">WhatsApp Updates / تحديثات واتساب</div>
+    <div class="qr-image-wrap">
+      <img src="${escapeHtml(qrDataUrl)}" alt="WhatsApp opt-in QR" class="qr-image" />
+    </div>
+    <div class="instruction-title">How to use / طريقة الاستخدام</div>
+    <ol class="instructions">
+      <li>Scan this QR with your phone camera.</li>
+      <li>WhatsApp opens with a pre-filled message.</li>
+      <li>Send the message to subscribe for ticket updates.</li>
+    </ol>
+    <ol class="instructions instructions--arabic" dir="rtl">
+      <li>امسح رمز QR بكاميرا هاتفك.</li>
+      <li>سيتم فتح واتساب برسالة جاهزة.</li>
+      <li>أرسل الرسالة للاشتراك في تحديثات التذكرة.</li>
+    </ol>
+    `
+    : `
+    <hr />
+    <div class="small strong">WhatsApp Updates / تحديثات واتساب</div>
+    <div class="small">QR unavailable / رمز QR غير متاح</div>
+    <div class="qr">${escapeHtml(whatsappOptInQrUrl)}</div>
+    `;
 
   return `<!doctype html>
 <html>
@@ -26,7 +54,14 @@ const buildTicketPrintHtml = (payload) => {
       .row { margin: 6px 0; font-size: 14px; }
       .value { font-weight: 700; }
       .small { font-size: 12px; color: #444; margin-top: 10px; }
+      .strong { font-weight: 700; color: #111; }
       .qr { font-size: 11px; word-break: break-all; margin-top: 6px; }
+      .qr-image-wrap { margin-top: 8px; text-align: center; }
+      .qr-image { width: 140px; height: 140px; }
+      .instruction-title { margin-top: 10px; font-size: 12px; font-weight: 700; }
+      .instructions { margin: 6px 0 0 16px; padding: 0; font-size: 11px; }
+      .instructions li { margin: 2px 0; }
+      .instructions--arabic { margin-left: 0; margin-right: 16px; text-align: right; }
       hr { border: none; border-top: 1px dashed #777; margin: 8px 0; }
     </style>
   </head>
@@ -38,11 +73,28 @@ const buildTicketPrintHtml = (payload) => {
     <div class="row">Service: <span class="value">${escapeHtml(payload.serviceId)}</span></div>
     <div class="row">People Ahead: <span class="value">${escapeHtml(peopleAhead)}</span></div>
     <div class="row">Issued At: <span class="value">${escapeHtml(payload.issuedAt)}</span></div>
-    <hr />
-    <div class="small">WhatsApp Opt-in QR URL</div>
-    <div class="qr">${escapeHtml(payload.whatsappOptInQrUrl ?? "")}</div>
+    ${whatsappSectionHtml}
   </body>
 </html>`;
+};
+
+const generateQrDataUrl = async (value) => {
+  const qrSource = String(value ?? "").trim();
+  if (!qrSource) {
+    return null;
+  }
+
+  try {
+    return await QRCode.toDataURL(qrSource, {
+      errorCorrectionLevel: "M",
+      margin: 1,
+      width: 180,
+      type: "image/png",
+    });
+  } catch (error) {
+    console.error("Failed to generate local QR image", error);
+    return null;
+  }
 };
 
 ipcMain.handle("kiosk:listPrinters", async (event) => {
@@ -100,7 +152,8 @@ ipcMain.handle("kiosk:printTicket", async (_event, request) => {
   });
 
   try {
-    const html = buildTicketPrintHtml(payload);
+    const qrDataUrl = await generateQrDataUrl(payload.whatsappOptInQrUrl);
+    const html = buildTicketPrintHtml(payload, qrDataUrl);
     await printWindow.loadURL(
       `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
     );
@@ -167,11 +220,13 @@ ipcMain.handle("kiosk:printTicket", async (_event, request) => {
 });
 
 const createWindow = () => {
+  const windowIconPath = path.join(__dirname, "..", "public", "icon.ico");
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
     kiosk: false,
     autoHideMenuBar: true,
+    icon: windowIconPath,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

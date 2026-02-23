@@ -1,5 +1,61 @@
 const runtime = window.kioskRuntime?.config ?? {};
 
+const extractApiErrorCode = (body) => {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+
+  const candidateCode =
+    body.code ||
+    body.errorCode ||
+    body?.error?.code ||
+    body?.error?.errorCode ||
+    null;
+
+  if (!candidateCode) {
+    return null;
+  }
+
+  return String(candidateCode).toUpperCase();
+};
+
+const extractApiErrorMessage = (body, fallback) => {
+  if (!body || typeof body !== "object") {
+    return fallback;
+  }
+
+  const candidateMessage =
+    body.message ||
+    body.detail ||
+    body?.error?.message ||
+    body?.error?.detail ||
+    (typeof body.error === "string" ? body.error : null) ||
+     fallback;
+
+
+  return String(candidateMessage || fallback);
+};
+
+const readJsonSafely = async (response) => {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+};
+
+const createApiError = async (response, fallbackMessage) => {
+  const body = await readJsonSafely(response);
+  const error = new Error(extractApiErrorMessage(body, fallbackMessage));
+
+  error.name = "KioskApiError";
+  error.status = response.status;
+  error.code = extractApiErrorCode(body);
+  error.details = body;
+
+  return error;
+};
+
 export const getDefaultKioskConfig = () => {
   return {
     useMockApi: runtime.useMockApi !== false,
@@ -7,6 +63,7 @@ export const getDefaultKioskConfig = () => {
     mode: runtime.defaultMode || "reception",
     lockedDepartmentId: runtime.lockedDepartmentId || "dept-general",
     language: "en",
+    highContrast: false,
     printerName: "",
   };
 };
@@ -67,13 +124,19 @@ const createHttpProvider = (baseUrl) => ({
 
   async listDepartments() {
     const response = await fetch(`${baseUrl}/departments`);
-    if (!response.ok) throw new Error("Failed to load departments");
+    if (!response.ok) {
+      throw await createApiError(response, "Failed to load departments");
+    }
+
     return response.json();
   },
 
   async listServicesByDepartment(departmentId) {
     const response = await fetch(`${baseUrl}/departments/${departmentId}/services`);
-    if (!response.ok) throw new Error("Failed to load services");
+    if (!response.ok) {
+      throw await createApiError(response, "Failed to load services");
+    }
+
     return response.json();
   },
 
@@ -83,7 +146,11 @@ const createHttpProvider = (baseUrl) => ({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
-    if (!response.ok) throw new Error("Failed to issue ticket");
+
+    if (!response.ok) {
+      throw await createApiError(response, "Failed to issue ticket");
+    }
+
     return response.json();
   },
 });
