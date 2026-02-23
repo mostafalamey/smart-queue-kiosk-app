@@ -29,6 +29,7 @@
     "cross-env": "^7.0.3",
     "electron": "^37.2.3",
     "electron-builder": "^26.8.1",
+    "rcedit": "^4.0.1",
     "sharp": "^0.34.3",
     "to-ico": "^1.1.5",
     "vite": "^5.4.19",
@@ -37,6 +38,7 @@
   "build": {
     "appId": "com.mlextensions.smartqueue.kiosk",
     "productName": "Smart Queue Kiosk",
+    "afterPack": "scripts/after-pack.js",
     "asar": true,
     "directories": {
       "output": "release",
@@ -47,6 +49,12 @@
       "src/**/*",
       "public/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build-resources/icon.ico",
+        "to": "icon.ico"
+      }
     ],
     "win": {
       "icon": "icon.ico",
@@ -67,6 +75,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Smart Queue Kiosk",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico",
+      "runAfterFinish": false,
       "artifactName": "Smart-Queue-Kiosk-Setup-${version}.${ext}"
     }
   }
