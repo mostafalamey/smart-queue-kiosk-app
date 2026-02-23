@@ -1,6 +1,9 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("node:path");
+const fs = require("node:fs");
 const QRCode = require("qrcode");
+
+let isAppQuitting = false;
 
 const escapeHtml = (value) => {
   return String(value ?? "")
@@ -220,7 +223,14 @@ ipcMain.handle("kiosk:printTicket", async (_event, request) => {
 });
 
 const createWindow = () => {
-  const windowIconPath = path.join(__dirname, "..", "public", "logo-256.ico");
+  const packagedIconPath = path.join(process.resourcesPath, "icon.ico");
+  const devIconPath = path.join(__dirname, "..", "build-resources", "icon.ico");
+  const legacyDevIconPath = path.join(__dirname, "..", "public", "logo-256.ico");
+  const windowIconPath = app.isPackaged
+    ? packagedIconPath
+    : fs.existsSync(devIconPath)
+      ? devIconPath
+      : legacyDevIconPath;
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -253,7 +263,8 @@ const createWindow = () => {
 
     if (isCloseAppShortcut) {
       event.preventDefault();
-      app.quit();
+      isAppQuitting = true;
+      app.exit(0);
     }
   });
 
@@ -270,11 +281,17 @@ const createWindow = () => {
 app.whenReady().then(() => {
   createWindow();
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
+  if (process.platform === "darwin") {
+    app.on("activate", () => {
+      if (!isAppQuitting && BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  }
+});
+
+app.on("before-quit", () => {
+  isAppQuitting = true;
 });
 
 app.on("window-all-closed", () => {
