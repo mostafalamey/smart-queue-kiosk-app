@@ -116,7 +116,13 @@ const mockProvider = {
   },
 };
 
-const createHttpProvider = (baseUrl) => ({
+const createHttpProvider = (baseUrl, language = "en") => {
+  const pickName = (item) =>
+    language === "ar"
+      ? (item.nameAr || item.nameEn || item.name || "")
+      : (item.nameEn || item.nameAr || item.name || "");
+
+  return {
   async health() {
     const response = await fetch(`${baseUrl}/health`);
     return { healthy: response.ok };
@@ -128,7 +134,8 @@ const createHttpProvider = (baseUrl) => ({
       throw await createApiError(response, "Failed to load departments");
     }
 
-    return response.json();
+    const data = await response.json();
+    return data.map((d) => ({ ...d, name: pickName(d) }));
   },
 
   async listServicesByDepartment(departmentId) {
@@ -137,7 +144,8 @@ const createHttpProvider = (baseUrl) => ({
       throw await createApiError(response, "Failed to load services");
     }
 
-    return response.json();
+    const data = await response.json();
+    return data.map((s) => ({ ...s, name: pickName(s) }));
   },
 
   async issueTicket(input) {
@@ -153,12 +161,12 @@ const createHttpProvider = (baseUrl) => ({
 
     return response.json();
   },
-});
+};};
 
 export const createKioskDataProvider = (config) => {
   if (config?.useMockApi) {
     return mockProvider;
   }
 
-  return createHttpProvider(config?.apiBaseUrl || "http://localhost:3000");
+  return createHttpProvider(config?.apiBaseUrl || "http://localhost:3000", config?.language || "en");
 };
