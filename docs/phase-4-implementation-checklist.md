@@ -1,8 +1,10 @@
 # Phase 4 — Kiosk App Implementation Checklist
 
-Date: 2026-02-22
+Date: 2026-02-27 (last updated)
 Repo: `smart-queue-kiosk-app`
 Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with required kiosk flows and safe offline behavior.
+
+> For local dev setup, running the kiosk dev server, and connecting to the backend, see `DEV-SETUP.md` in the workspace root.
 
 ## Status Legend
 - [ ] Not started
@@ -16,7 +18,7 @@ Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with requir
 
 ## Overall Progress
 - Phase 4 status: **In Progress**
-- Completed checklist items: **13 / 15**
+- Completed checklist items: **14 / 15**
 - Current focus: protected settings authorization cutover (backend-ready) and final contract/test hardening before Phase 4 closure.
 
 ## Checklist
@@ -31,7 +33,11 @@ Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with requir
 - [x] Switchable data provider implemented (`mock` vs `http`)
 - [x] Provider selected from runtime/config state
 - [x] No direct PostgreSQL access from kiosk app
-- [~] HTTP provider aligned to final backend endpoint contracts
+- [x] HTTP provider aligned to final backend endpoint contracts
+  - `GET /departments` → normalized to `{ id, name, nameEn, nameAr }`
+  - `GET /departments/:id/services` → normalized to `{ id, name, nameEn, nameAr, ticketPrefix, estimatedWaitMinutes }`
+  - `POST /tickets` → returns `{ ticket, queueSnapshot, whatsappOptInQrUrl, issuedAt }`
+  - Bilingual field normalization: `pickName()` maps `nameEn`/`nameAr` → `name` based on configured language
 
 ### 3) Kiosk Configuration Wizard (First Run)
 - [x] First-run setup wizard implemented
