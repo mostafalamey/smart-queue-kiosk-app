@@ -116,49 +116,60 @@ const mockProvider = {
   },
 };
 
-const createHttpProvider = (baseUrl) => ({
-  async health() {
-    const response = await fetch(`${baseUrl}/health`);
-    return { healthy: response.ok };
-  },
+const createHttpProvider = (baseUrl, language = "en") => {
+  const normalizedLanguage = String(language || "en").toLowerCase();
+  const isArabic = normalizedLanguage.startsWith("ar");
+  const pickName = (item) =>
+    isArabic
+      ? (item.nameAr || item.nameEn || item.name || "")
+      : (item.nameEn || item.nameAr || item.name || "");
 
-  async listDepartments() {
-    const response = await fetch(`${baseUrl}/departments`);
-    if (!response.ok) {
-      throw await createApiError(response, "Failed to load departments");
-    }
+  return {
+    async health() {
+      const response = await fetch(`${baseUrl}/health`);
+      return { healthy: response.ok };
+    },
 
-    return response.json();
-  },
+    async listDepartments() {
+      const response = await fetch(`${baseUrl}/departments`);
+      if (!response.ok) {
+        throw await createApiError(response, "Failed to load departments");
+      }
 
-  async listServicesByDepartment(departmentId) {
-    const response = await fetch(`${baseUrl}/departments/${departmentId}/services`);
-    if (!response.ok) {
-      throw await createApiError(response, "Failed to load services");
-    }
+      const data = await response.json();
+      return data.map((d) => ({ ...d, name: pickName(d) }));
+    },
 
-    return response.json();
-  },
+    async listServicesByDepartment(departmentId) {
+      const response = await fetch(`${baseUrl}/departments/${departmentId}/services`);
+      if (!response.ok) {
+        throw await createApiError(response, "Failed to load services");
+      }
 
-  async issueTicket(input) {
-    const response = await fetch(`${baseUrl}/tickets`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
-    });
+      const data = await response.json();
+      return data.map((s) => ({ ...s, name: pickName(s) }));
+    },
 
-    if (!response.ok) {
-      throw await createApiError(response, "Failed to issue ticket");
-    }
+    async issueTicket(input) {
+      const response = await fetch(`${baseUrl}/tickets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
 
-    return response.json();
-  },
-});
+      if (!response.ok) {
+        throw await createApiError(response, "Failed to issue ticket");
+      }
+
+      return response.json();
+    },
+  };
+};
 
 export const createKioskDataProvider = (config) => {
   if (config?.useMockApi) {
     return mockProvider;
   }
 
-  return createHttpProvider(config?.apiBaseUrl || "http://localhost:3000");
+  return createHttpProvider(config?.apiBaseUrl || "http://localhost:3000", config?.language || "en");
 };

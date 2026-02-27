@@ -1,8 +1,10 @@
 # Phase 4 — Kiosk App Implementation Checklist
 
-Date: 2026-02-22
+Date: 2026-02-27 (last updated)
 Repo: `smart-queue-kiosk-app`
 Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with required kiosk flows and safe offline behavior.
+
+> For local dev setup, running the kiosk dev server, and connecting to the backend, see `DEV-SETUP.md` in the workspace root.
 
 ## Status Legend
 - [ ] Not started
@@ -16,8 +18,8 @@ Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with requir
 
 ## Overall Progress
 - Phase 4 status: **In Progress**
-- Completed checklist items: **13 / 15**
-- Current focus: protected settings authorization cutover (backend-ready) and final contract/test hardening before Phase 4 closure.
+- Completed checklist items: **15 / 17**
+- Current focus: protected settings authorization cutover (backend-ready) and focused tests for config lifecycle and data-provider switching.
 
 ## Checklist
 
@@ -31,7 +33,11 @@ Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with requir
 - [x] Switchable data provider implemented (`mock` vs `http`)
 - [x] Provider selected from runtime/config state
 - [x] No direct PostgreSQL access from kiosk app
-- [~] HTTP provider aligned to final backend endpoint contracts
+- [x] HTTP provider aligned to final backend endpoint contracts
+  - `GET /departments` → normalized to `{ id, name, nameEn, nameAr }`
+  - `GET /departments/:id/services` → normalized to `{ id, name, nameEn, nameAr, ticketPrefix, estimatedWaitMinutes }`
+  - `POST /tickets` → returns `{ ticket, queueSnapshot, whatsappOptInQrUrl, issuedAt }`
+  - Bilingual field normalization: `pickName()` maps `nameEn`/`nameAr` → `name` based on configured language
 
 ### 3) Kiosk Configuration Wizard (First Run)
 - [x] First-run setup wizard implemented
@@ -59,7 +65,8 @@ Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with requir
 - [x] Real printing integration from Electron wrapper (silent/selected printer path)
 - [x] Device ID generation/display and persistence for kiosk enrollment flow
 - [ ] Protected config access path (Admin/IT/Manager credentials) for post-setup edits
-- [ ] Contract alignment pass against finalized backend kiosk/ticket endpoints
+- [x] Contract alignment pass against finalized backend kiosk/ticket endpoints
+  (covered by section 2 — HTTP provider aligned with full endpoint and field details documented there)
 - [ ] Add focused tests for configuration lifecycle and data-provider switching
 
 ## Latest Implemented Progress (Current Branch Work)
@@ -78,5 +85,4 @@ Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with requir
 
 ## Next Recommended Slice
 1. Implement protected settings access flow (Admin/IT/Manager credentials) once backend auth endpoints are available.
-2. Run contract alignment pass against finalized backend kiosk/ticket endpoints.
-3. Add minimal focused tests for config lifecycle and data-provider switching paths.
+2. Add minimal focused tests for config lifecycle and data-provider switching paths.
