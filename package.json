@@ -5,6 +5,9 @@
   "author": "Mostafa Lamey",
   "description": "Smart Queue Kiosk (Electron-wrapped web app)",
   "main": "src/main.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev:web": "vite",
     "dev:electron": "wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",

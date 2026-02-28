@@ -3,13 +3,8 @@ import { QRCodeSVG } from "qrcode.react";
 import { createKioskDataProvider, getDefaultKioskConfig, HEALTH_POLL_INTERVAL_MS } from "./data/provider";
 import { createSettingsAccessController } from "./data/settings-access";
 import {
-  KIOSK_CONFIG_STORAGE_KEY,
-  KIOSK_DEVICE_ID_STORAGE_KEY,
-  isRecord,
-  parseStoredConfig,
   readStoredConfig,
   saveConfig,
-  createKioskDeviceId,
   getOrCreateKioskDeviceId,
 } from "./data/config";
 import {
@@ -527,6 +522,9 @@ export const App = () => {
   const [isSettingsAuthSubmitting, setIsSettingsAuthSubmitting] = useState(false);
   const phoneInputRef = useRef(null);
   const prevBackendHealthyRef = useRef(null);
+  const appContentRef = useRef(null);
+  const offlineOverlayRef = useRef(null);
+  const offlineSavedFocusRef = useRef(null);
   const flowSessionRef = useRef({
     flowId: "",
     startedAt: 0,
@@ -966,7 +964,6 @@ export const App = () => {
 
     const checkHealth = async () => {
       if (!navigator.onLine) {
-        const wasHealthy = prevBackendHealthyRef.current;
         prevBackendHealthyRef.current = false;
         setIsBackendHealthy(false);
         setDiagnostics((current) => ({
@@ -1194,7 +1191,7 @@ export const App = () => {
 
     try {
       const result = await settingsAccessController.verifyAccess({
-        email: settingsAuthEmail,
+        email: settingsAuthEmail.trim(),
         password: settingsAuthPassword,
       });
 
@@ -1496,6 +1493,28 @@ export const App = () => {
       return null;
     });
   }, [isBackendHealthy, isConfigMode]);
+
+  // Focus management for the offline overlay — traps focus while the backend is unreachable.
+  // When the overlay mounts the rest of the app is made inert so Tab cannot reach it.
+  // When the backend recovers, inert is removed and focus returns to wherever it was.
+  useEffect(() => {
+    const overlayEl = offlineOverlayRef.current;
+    const contentEl = appContentRef.current;
+
+    if (!isBackendHealthy) {
+      offlineSavedFocusRef.current =
+        document.activeElement !== document.body ? document.activeElement : null;
+      if (contentEl) contentEl.setAttribute("inert", "");
+      if (overlayEl) overlayEl.focus();
+    } else {
+      if (contentEl) contentEl.removeAttribute("inert");
+      const saved = offlineSavedFocusRef.current;
+      offlineSavedFocusRef.current = null;
+      if (saved && document.contains(saved)) {
+        saved.focus();
+      }
+    }
+  }, [isBackendHealthy]);
 
   useEffect(() => {
     if (isConfigMode || !kioskConfig || !isBackendHealthy) {
@@ -1995,6 +2014,8 @@ export const App = () => {
       className={`kiosk-shell ${kioskConfig.highContrast ? "kiosk-shell--high-contrast" : ""}`}
       dir={isArabic ? "rtl" : "ltr"}
     >
+      {/* appContentRef wrapper — made inert while the offline overlay is active */}
+      <div ref={appContentRef}>
       <header className="kiosk-header">
         <div>
           <h1>Smart Queue Kiosk</h1>
@@ -2310,16 +2331,20 @@ export const App = () => {
         </section>
       )}
       {appFooter}
+      </div>{/* end appContentRef */}
 
       {/* Offline overlay — blocks all patient interaction when backend is unreachable */}
       {!isBackendHealthy && (
         <div
+          ref={offlineOverlayRef}
+          tabIndex={-1}
           className="offline-overlay"
           role="alertdialog"
           aria-modal="true"
           aria-labelledby="offline-overlay-title"
           aria-describedby="offline-overlay-desc"
           aria-live="assertive"
+          onKeyDown={(e) => { if (e.key === "Tab") e.preventDefault(); }}
         >
           <WifiOff size={72} className="offline-overlay-icon" aria-hidden="true" />
           <h2 id="offline-overlay-title" className="offline-overlay-title">
