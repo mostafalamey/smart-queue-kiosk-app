@@ -944,3 +944,143 @@ button {
     font-size: 28px;
   }
 }
+/* ── Offline overlay ──────────────────────────────────────────────────── */
+
+.offline-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 9, 11, 0.88);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 32px;
+  text-align: center;
+  gap: 16px;
+  /* Ensures settings auth modal (z-index 1000) stays below if open at same time */
+}
+
+.offline-overlay-icon {
+  color: #f87171;
+  opacity: 0.95;
+}
+
+.offline-overlay-title {
+  font-size: clamp(26px, 4vw, 40px);
+  font-weight: 800;
+  color: #f1f5f9;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.offline-overlay-description {
+  font-size: clamp(15px, 2.2vw, 19px);
+  color: #cbd5e1;
+  max-width: 520px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.offline-overlay-reconnecting {
+  font-size: 13px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  letter-spacing: 0.02em;
+}
+
+/* Pulsing dot indicator for reconnecting state */
+.offline-overlay-reconnecting::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f87171;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+
+/* ── Settings auth modal ─────────────────────────────────────────────── */
+
+.settings-auth-popup {
+  width: min(460px, 100%);
+  padding: 28px 24px 20px;
+}
+
+.settings-auth-icon-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.settings-auth-icon {
+  color: var(--kiosk-accent);
+  opacity: 0.85;
+}
+
+.settings-auth-subtitle {
+  font-size: 13px;
+  color: var(--kiosk-muted);
+  margin: 0 0 16px;
+  line-height: 1.4;
+}
+
+.settings-auth-error {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-auth-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.settings-auth-input {
+  min-height: 44px;
+  padding: 10px 12px;
+  font-size: 15px;
+  border-radius: 10px;
+  border: 1.5px solid #d1d5db;
+  background: #f9fafb;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.settings-auth-input:focus {
+  outline: none;
+  border-color: var(--kiosk-accent);
+  background: #fff;
+}
+
+.settings-auth-actions {
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* High contrast adjustments */
+.kiosk-shell--high-contrast .settings-auth-input {
+  background: #fff;
+  border-color: #111;
+  color: #111;
+}

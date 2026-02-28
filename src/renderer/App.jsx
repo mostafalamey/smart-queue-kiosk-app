@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { createKioskDataProvider, getDefaultKioskConfig } from "./data/provider";
+import { createKioskDataProvider, getDefaultKioskConfig, HEALTH_POLL_INTERVAL_MS } from "./data/provider";
 import { createSettingsAccessController } from "./data/settings-access";
+import {
+  readStoredConfig,
+  saveConfig,
+  getOrCreateKioskDeviceId,
+} from "./data/config";
 import {
   AlertTriangle,
   Delete,
   CheckCircle2,
   Info,
   Languages,
+  Lock,
   Printer,
   Settings,
   Ticket,
@@ -16,8 +22,6 @@ import {
   XCircle,
 } from "lucide-react";
 
-const KIOSK_CONFIG_STORAGE_KEY = "smartQueue.kiosk.config.v1";
-const KIOSK_DEVICE_ID_STORAGE_KEY = "smartQueue.kiosk.deviceId.v1";
 const KIOSK_UX_METRICS_STORAGE_KEY = "smartQueue.kiosk.uxMetrics.v1";
 const KIOSK_UX_METRICS_MAX_EVENTS = 300;
 const KIOSK_IDLE_TIMEOUT_MS = 45_000;
@@ -53,7 +57,6 @@ const PATIENT_UI_TEXT = {
     noPrintersDetected: "No printers detected from Windows Print Services.",
     printerLoadFailed: "Failed to load system printers. Please retry.",
     highContrastModeLabel: "High Contrast Mode",
-    useMockApiLabel: "Use Mock API",
     refreshPrinters: "Refresh Printers",
     refreshingPrinters: "Refreshing Printers...",
     testConnection: "Test Connection",
@@ -62,9 +65,8 @@ const PATIENT_UI_TEXT = {
     copyDeviceId: "Copy Device ID",
     copyDeviceIdDone: "Device ID copied.",
     copyDeviceIdFailed: "Unable to copy Device ID. Please copy it manually.",
-    settingsAuthDeferredNotice:
-      "Settings protection is deferred until backend authorization endpoints are available. Access remains open for this phase.",
-    serverUrlRequiredWhenNoMock: "Server URL is required when Use Mock API is disabled.",
+    serverUrlRequired: "Server URL is required.",
+    serverConnectionSuccess: "Connection successful. Server is reachable and healthy.",
     serverConnectionFailedHealth:
       "Unable to connect to the server URL. Please verify the address and backend health endpoint.",
     serverConnectionFailedNetwork:
@@ -73,6 +75,20 @@ const PATIENT_UI_TEXT = {
       "No departments are available for Department-Locked mode. Please verify department data source and try again.",
     lockedDepartmentRequired:
       "Locked Department ID is required when kiosk mode is Department-Locked.",
+    settingsAuthTitle: "Settings Access",
+    settingsAuthSubtitle: "Enter Admin, IT, or Manager credentials to unlock settings.",
+    settingsAuthEmailLabel: "Email",
+    settingsAuthPasswordLabel: "Password",
+    settingsAuthSubmit: "Verify & Open Settings",
+    settingsAuthVerifying: "Verifying...",
+    settingsAuthInvalidCredentials: "Invalid credentials. Please try again.",
+    settingsAuthForbiddenRole: "This account does not have permission to access settings. Admin, IT, or Manager role required.",
+    settingsAuthNetworkError: "Unable to reach server. Check the network connection and try again.",
+    settingsAuthRateLimited: "Too many attempts. Please wait a moment and try again.",
+    settingsAuthServerError: "Server error. Please try again.",
+    offlineOverlayTitle: "Service temporarily unavailable",
+    offlineOverlayDescription: "Please ask reception for assistance. The system will reconnect automatically.",
+    offlineOverlayReconnecting: "Reconnecting…",
     settings: "Settings",
     settingsGeneralTab: "General",
     settingsPrinterTab: "Printer",
@@ -199,7 +215,6 @@ const PATIENT_UI_TEXT = {
     noPrintersDetected: "لم يتم العثور على طابعات عبر خدمات طباعة ويندوز.",
     printerLoadFailed: "تعذر تحميل طابعات النظام. يرجى إعادة المحاولة.",
     highContrastModeLabel: "وضع التباين العالي",
-    useMockApiLabel: "استخدام واجهة تجريبية",
     refreshPrinters: "تحديث الطابعات",
     refreshingPrinters: "جارٍ تحديث الطابعات...",
     testConnection: "اختبار الاتصال",
@@ -208,9 +223,8 @@ const PATIENT_UI_TEXT = {
     copyDeviceId: "نسخ معرّف الجهاز",
     copyDeviceIdDone: "تم نسخ معرّف الجهاز.",
     copyDeviceIdFailed: "تعذر نسخ معرّف الجهاز. يرجى نسخه يدويًا.",
-    settingsAuthDeferredNotice:
-      "حماية الإعدادات مؤجلة حتى توفر نقاط تفويض الخادم. الوصول يظل مفتوحًا في هذه المرحلة.",
-    serverUrlRequiredWhenNoMock: "رابط الخادم مطلوب عند تعطيل الواجهة التجريبية.",
+    serverUrlRequired: "رابط الخادم مطلوب.",
+    serverConnectionSuccess: "تم الاتصال بنجاح. الخادم يعمل ويمكن الوصول إليه.",
     serverConnectionFailedHealth:
       "تعذر الاتصال برابط الخادم. يرجى التحقق من العنوان ونقطة فحص صحة الخادم.",
     serverConnectionFailedNetwork:
@@ -219,6 +233,20 @@ const PATIENT_UI_TEXT = {
       "لا توجد أقسام متاحة لوضع القسم المقيد. يرجى التحقق من مصدر بيانات الأقسام ثم المحاولة مرة أخرى.",
     lockedDepartmentRequired:
       "معرّف القسم المقيد مطلوب عند تفعيل وضع القسم المقيد.",
+    settingsAuthTitle: "الوصول إلى الإعدادات",
+    settingsAuthSubtitle: "أدخل بيانات المسؤول أو مسؤول تقنية المعلومات أو المدير لفتح الإعدادات.",
+    settingsAuthEmailLabel: "البريد الإلكتروني",
+    settingsAuthPasswordLabel: "كلمة المرور",
+    settingsAuthSubmit: "تحقق وافتح الإعدادات",
+    settingsAuthVerifying: "جارٍ التحقق...",
+    settingsAuthInvalidCredentials: "بيانات غير صحيحة. يرجى المحاولة مرة أخرى.",
+    settingsAuthForbiddenRole: "هذا الحساب لا يملك صلاحية الوصول إلى الإعدادات. يُشترط دور المسؤول أو مسؤول تقنية المعلومات أو المدير.",
+    settingsAuthNetworkError: "تعذر الوصول إلى الخادم. تحقق من الاتصال بالشبكة وأعد المحاولة.",
+    settingsAuthRateLimited: "محاولات كثيرة. يرجى الانتظار قليلاً والمحاولة مرة أخرى.",
+    settingsAuthServerError: "خطأ في الخادم. يرجى المحاولة مرة أخرى.",
+    offlineOverlayTitle: "الخدمة غير متاحة مؤقتًا",
+    offlineOverlayDescription: "يرجى التوجه إلى الاستقبال للحصول على المساعدة. سيُعاد الاتصال تلقائيًا.",
+    offlineOverlayReconnecting: "جارٍ إعادة الاتصال…",
     settings: "الإعدادات",
     settingsGeneralTab: "عام",
     settingsPrinterTab: "الطابعة",
@@ -339,174 +367,6 @@ const validatePhoneNumber = (value) => {
   return "invalid";
 };
 
-const isRecord = (value) => {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-};
-
-const createKioskDeviceId = () => {
-  const uniquePart =
-    typeof globalThis?.crypto?.randomUUID === "function"
-      ? globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 12)
-      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-
-  return `KIOSK-${uniquePart.toUpperCase()}`;
-};
-
-const getOrCreateKioskDeviceId = () => {
-  const readStorage = (storage) => {
-    try {
-      const value = storage.getItem(KIOSK_DEVICE_ID_STORAGE_KEY);
-      if (typeof value === "string" && value.trim().length > 0) {
-        return value.trim();
-      }
-    } catch {
-      return null;
-    }
-
-    return null;
-  };
-
-  const localDeviceId = readStorage(window.localStorage);
-  if (localDeviceId) {
-    return localDeviceId;
-  }
-
-  const sessionDeviceId = readStorage(window.sessionStorage);
-  if (sessionDeviceId) {
-    return sessionDeviceId;
-  }
-
-  const generatedId = createKioskDeviceId();
-
-  try {
-    window.localStorage.setItem(KIOSK_DEVICE_ID_STORAGE_KEY, generatedId);
-    return generatedId;
-  } catch {
-    try {
-      window.sessionStorage.setItem(KIOSK_DEVICE_ID_STORAGE_KEY, generatedId);
-      return generatedId;
-    } catch {
-      return generatedId;
-    }
-  }
-};
-
-const parseStoredConfig = (value) => {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const useMockApi = value.useMockApi;
-  const apiBaseUrl = value.apiBaseUrl;
-  const mode = value.mode;
-  const lockedDepartmentId = value.lockedDepartmentId;
-  const language = value.language;
-  const highContrast = value.highContrast;
-  const printerName = value.printerName;
-
-  const hasValidShape =
-    typeof useMockApi === "boolean" &&
-    typeof apiBaseUrl === "string" &&
-    apiBaseUrl.trim().length > 0 &&
-    (mode === "reception" || mode === "department-locked") &&
-    typeof lockedDepartmentId === "string" &&
-    lockedDepartmentId.trim().length > 0 &&
-    (language === "en" || language === "ar") &&
-    (typeof highContrast === "boolean" || typeof highContrast === "undefined") &&
-    typeof printerName === "string";
-
-  if (!hasValidShape) {
-    return null;
-  }
-
-  return {
-    useMockApi,
-    apiBaseUrl: apiBaseUrl.trim(),
-    mode,
-    lockedDepartmentId: lockedDepartmentId.trim(),
-    language,
-    highContrast: typeof highContrast === "boolean" ? highContrast : false,
-    printerName,
-  };
-};
-
-const readStoredConfig = () => {
-  const parseAndValidate = (raw) => {
-    if (!raw) {
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(raw);
-      const validated = parseStoredConfig(parsed);
-      if (!validated) {
-        console.warn("Ignoring invalid stored kiosk config", KIOSK_CONFIG_STORAGE_KEY);
-        return null;
-      }
-
-      return validated;
-    } catch {
-      return null;
-    }
-  };
-
-  let localRaw = null;
-  let sessionRaw = null;
-
-  try {
-    localRaw = window.localStorage.getItem(KIOSK_CONFIG_STORAGE_KEY);
-  } catch {
-    localRaw = null;
-  }
-
-  const localValidated = parseAndValidate(localRaw);
-  if (localValidated) {
-    return localValidated;
-  }
-
-  try {
-    sessionRaw = window.sessionStorage.getItem(KIOSK_CONFIG_STORAGE_KEY);
-  } catch {
-    sessionRaw = null;
-  }
-
-  return parseAndValidate(sessionRaw);
-};
-
-const saveConfig = (config) => {
-  try {
-    window.localStorage.setItem(KIOSK_CONFIG_STORAGE_KEY, JSON.stringify(config));
-    return {
-      saved: true,
-      message: null,
-    };
-  } catch (error) {
-    console.error(
-      "Failed to save config",
-      KIOSK_CONFIG_STORAGE_KEY,
-      error,
-      config
-    );
-
-    try {
-      window.sessionStorage.setItem(
-        KIOSK_CONFIG_STORAGE_KEY,
-        JSON.stringify(config)
-      );
-      return {
-        saved: true,
-        message:
-          "Configuration was saved to temporary session storage. Please check kiosk browser storage permissions.",
-      };
-    } catch {
-      return {
-        saved: false,
-        message:
-          "Unable to save kiosk configuration. Please enable browser storage and try again.",
-      };
-    }
-  }
-};
 
 const readStoredUxMetrics = () => {
   const readStorage = (storage) => {
@@ -655,7 +515,16 @@ export const App = () => {
   const [uxMetricsSummary, setUxMetricsSummary] = useState(() =>
     calculateUxMetricsSummary(readStoredUxMetrics())
   );
+  const [isSettingsAuthOpen, setIsSettingsAuthOpen] = useState(false);
+  const [settingsAuthEmail, setSettingsAuthEmail] = useState("");
+  const [settingsAuthPassword, setSettingsAuthPassword] = useState("");
+  const [settingsAuthError, setSettingsAuthError] = useState(null);
+  const [isSettingsAuthSubmitting, setIsSettingsAuthSubmitting] = useState(false);
   const phoneInputRef = useRef(null);
+  const prevBackendHealthyRef = useRef(null);
+  const appContentRef = useRef(null);
+  const offlineOverlayRef = useRef(null);
+  const offlineSavedFocusRef = useRef(null);
   const flowSessionRef = useRef({
     flowId: "",
     startedAt: 0,
@@ -996,7 +865,6 @@ export const App = () => {
   }, [
     isConfigMode,
     kioskConfig?.mode,
-    kioskConfig?.useMockApi,
     kioskConfig?.apiBaseUrl,
   ]);
 
@@ -1096,6 +964,7 @@ export const App = () => {
 
     const checkHealth = async () => {
       if (!navigator.onLine) {
+        prevBackendHealthyRef.current = false;
         setIsBackendHealthy(false);
         setDiagnostics((current) => ({
           ...current,
@@ -1107,13 +976,20 @@ export const App = () => {
 
       try {
         const health = await kioskDataProvider.health();
+        const wasHealthy = prevBackendHealthyRef.current;
+        prevBackendHealthyRef.current = health.healthy;
         setIsBackendHealthy(health.healthy);
         setDiagnostics((current) => ({
           ...current,
           lastHealthStatus: health.healthy ? "healthy" : "unhealthy",
           lastHealthCheckedAt: new Date().toISOString(),
         }));
+        // Auto-reload data when backend recovers from an unhealthy state
+        if (wasHealthy === false && health.healthy) {
+          setDataReloadKey((k) => k + 1);
+        }
       } catch {
+        prevBackendHealthyRef.current = false;
         setIsBackendHealthy(false);
         setDiagnostics((current) => ({
           ...current,
@@ -1125,10 +1001,15 @@ export const App = () => {
 
     void checkHealth();
 
+    const pollIntervalId = window.setInterval(() => {
+      void checkHealth();
+    }, HEALTH_POLL_INTERVAL_MS);
+
     const onOnline = () => {
       void checkHealth();
     };
     const onOffline = () => {
+      prevBackendHealthyRef.current = false;
       setIsBackendHealthy(false);
       setDiagnostics((current) => ({
         ...current,
@@ -1141,20 +1022,17 @@ export const App = () => {
     window.addEventListener("offline", onOffline);
 
     return () => {
+      window.clearInterval(pollIntervalId);
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
     };
   }, [kioskConfig, kioskDataProvider, isConfigMode]);
 
   const testServerConnection = async (config) => {
-    if (config.useMockApi) {
-      return true;
-    }
-
     const normalizedApiBaseUrl = config.apiBaseUrl.trim();
     if (!normalizedApiBaseUrl) {
       setConfigPersistenceMessage(
-        createConfigPersistenceMessage("warning", uiText.serverUrlRequiredWhenNoMock)
+        createConfigPersistenceMessage("warning", uiText.serverUrlRequired)
       );
       return false;
     }
@@ -1177,7 +1055,9 @@ export const App = () => {
         return false;
       }
 
-      setConfigPersistenceMessage(null);
+      setConfigPersistenceMessage(
+        createConfigPersistenceMessage("success", uiText.serverConnectionSuccess)
+      );
       return true;
     } catch (error) {
       console.error("Failed to test kiosk server connection", error);
@@ -1211,7 +1091,7 @@ export const App = () => {
   };
 
   const onTestConnection = async () => {
-    if (!kioskConfig || kioskConfig.useMockApi || isTestingConnection) {
+    if (!kioskConfig || isTestingConnection) {
       return;
     }
 
@@ -1289,43 +1169,65 @@ export const App = () => {
     setSettingsTab("general");
   };
 
-  const onOpenSettings = async () => {
+  const onOpenSettings = () => {
     if (!kioskConfig) {
       return;
     }
+    // Open credential gate — onSubmitSettingsAuth will open the wizard on success
+    setSettingsAuthEmail("");
+    setSettingsAuthPassword("");
+    setSettingsAuthError(null);
+    setIsSettingsAuthOpen(true);
+  };
 
-    let accessResult;
+  const onSubmitSettingsAuth = async (event) => {
+    event.preventDefault();
+    if (isSettingsAuthSubmitting) {
+      return;
+    }
+
+    setSettingsAuthError(null);
+    setIsSettingsAuthSubmitting(true);
 
     try {
-      accessResult = await settingsAccessController.verifyAccess();
+      const result = await settingsAccessController.verifyAccess({
+        email: settingsAuthEmail.trim(),
+        password: settingsAuthPassword,
+      });
+
+      if (!result.allowed) {
+        const reasonMap = {
+          invalid_credentials: uiText.settingsAuthInvalidCredentials,
+          forbidden_role: uiText.settingsAuthForbiddenRole,
+          network_error: uiText.settingsAuthNetworkError,
+          rate_limited: uiText.settingsAuthRateLimited,
+          server_error: uiText.settingsAuthServerError,
+          no_backend_configured: null,
+        };
+        setSettingsAuthError(reasonMap[result.reason] ?? uiText.settingsAuthServerError);
+        return;
+      }
+
+      // Access granted — open settings wizard
+      setIsSettingsAuthOpen(false);
+      setSettingsAuthEmail("");
+      setSettingsAuthPassword("");
+      setPreviousKioskConfig({ ...kioskConfig });
+      setSettingsTab("general");
+      setIsConfigMode(true);
     } catch (error) {
-      console.error("Failed to verify settings access", error);
-      const errorMessage =
-        typeof error?.message === "string" && error.message.trim().length > 0
-          ? `${uiText.backendUnavailableDescription} (${error.message})`
-          : uiText.backendUnavailableDescription;
-      setConfigPersistenceMessage(
-        createConfigPersistenceMessage("error", errorMessage)
-      );
-      return;
+      console.error("Settings auth error", error);
+      setSettingsAuthError(uiText.settingsAuthNetworkError);
+    } finally {
+      setIsSettingsAuthSubmitting(false);
     }
+  };
 
-    if (!accessResult?.allowed) {
-      setConfigPersistenceMessage(
-        createConfigPersistenceMessage("warning", uiText.backendUnavailableDescription)
-      );
-      return;
-    }
-
-    if (accessResult.deferred) {
-      setConfigPersistenceMessage(
-        createConfigPersistenceMessage("info", uiText.settingsAuthDeferredNotice)
-      );
-    }
-
-    setPreviousKioskConfig({ ...kioskConfig });
-    setSettingsTab("general");
-    setIsConfigMode(true);
+  const onCancelSettingsAuth = () => {
+    setIsSettingsAuthOpen(false);
+    setSettingsAuthEmail("");
+    setSettingsAuthPassword("");
+    setSettingsAuthError(null);
   };
 
   const resetKioskFlow = useCallback(
@@ -1361,14 +1263,7 @@ export const App = () => {
 
   const onSelectService = (serviceId) => {
     if (!isBackendHealthy) {
-      setActiveMessage({
-        tone: "error",
-        title: uiText.backendUnavailableTitle,
-        description: uiText.backendUnavailableDescription,
-        printState: null,
-        allowRetryPrint: false,
-        allowStartOver: false,
-      });
+      // Offline overlay is already blocking interaction; do nothing
       return;
     }
 
@@ -1403,14 +1298,7 @@ export const App = () => {
       }
 
       if (!isBackendHealthy) {
-        setActiveMessage({
-          tone: "error",
-          title: uiText.backendUnavailableTitle,
-          description: uiText.backendUnavailableDescription,
-          printState: null,
-          allowRetryPrint: false,
-          allowStartOver: false,
-        });
+        // Offline overlay is already blocking interaction; do nothing
         return;
       }
 
@@ -1593,22 +1481,40 @@ export const App = () => {
       return;
     }
 
+    // Close phone popup immediately — patient cannot issue a ticket while offline
     setIsPhonePopupOpen(false);
+
+    // Clear any non-success in-progress message so the offline overlay takes over cleanly
     setActiveMessage((current) => {
-      if (current) {
+      if (!current || current.tone === "success" || current.tone === "warning") {
+        // Keep success (printed ticket) and warnings (print failed) visible
         return current;
       }
-
-      return {
-        tone: "error",
-        title: uiText.backendUnavailableTitle,
-        description: uiText.backendUnavailableDescription,
-        printState: null,
-        allowRetryPrint: false,
-        allowStartOver: false,
-      };
+      return null;
     });
-  }, [isBackendHealthy, isConfigMode, uiText]);
+  }, [isBackendHealthy, isConfigMode]);
+
+  // Focus management for the offline overlay — traps focus while the backend is unreachable.
+  // When the overlay mounts the rest of the app is made inert so Tab cannot reach it.
+  // When the backend recovers, inert is removed and focus returns to wherever it was.
+  useEffect(() => {
+    const overlayEl = offlineOverlayRef.current;
+    const contentEl = appContentRef.current;
+
+    if (!isBackendHealthy) {
+      offlineSavedFocusRef.current =
+        document.activeElement !== document.body ? document.activeElement : null;
+      if (contentEl) contentEl.setAttribute("inert", "");
+      if (overlayEl) overlayEl.focus();
+    } else {
+      if (contentEl) contentEl.removeAttribute("inert");
+      const saved = offlineSavedFocusRef.current;
+      offlineSavedFocusRef.current = null;
+      if (saved && document.contains(saved)) {
+        saved.focus();
+      }
+    }
+  }, [isBackendHealthy]);
 
   useEffect(() => {
     if (isConfigMode || !kioskConfig || !isBackendHealthy) {
@@ -1826,8 +1732,7 @@ export const App = () => {
                   {uiText.serverUrlLabel}
                   <input
                     type="url"
-                    required={!kioskConfig.useMockApi}
-                    disabled={kioskConfig.useMockApi}
+                    required
                     value={kioskConfig.apiBaseUrl}
                     onChange={(event) =>
                       setKioskConfig((current) => ({
@@ -1836,20 +1741,6 @@ export const App = () => {
                       }))
                     }
                   />
-                </label>
-
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={kioskConfig.useMockApi}
-                    onChange={(event) =>
-                      setKioskConfig((current) => ({
-                        ...current,
-                        useMockApi: event.target.checked,
-                      }))
-                    }
-                  />
-                  {uiText.useMockApiLabel}
                 </label>
 
                 <label className="checkbox-row">
@@ -1866,11 +1757,9 @@ export const App = () => {
                   {uiText.highContrastModeLabel}
                 </label>
 
-                {!kioskConfig.useMockApi && (
-                  <button type="button" onClick={onTestConnection} disabled={isTestingConnection}>
-                    {isTestingConnection ? uiText.testing : uiText.testConnection}
-                  </button>
-                )}
+                <button type="button" onClick={onTestConnection} disabled={isTestingConnection}>
+                  {isTestingConnection ? uiText.testing : uiText.testConnection}
+                </button>
               </section>
             )}
 
@@ -2125,6 +2014,8 @@ export const App = () => {
       className={`kiosk-shell ${kioskConfig.highContrast ? "kiosk-shell--high-contrast" : ""}`}
       dir={isArabic ? "rtl" : "ltr"}
     >
+      {/* appContentRef wrapper — made inert while the offline overlay is active */}
+      <div ref={appContentRef}>
       <header className="kiosk-header">
         <div>
           <h1>Smart Queue Kiosk</h1>
@@ -2440,6 +2331,105 @@ export const App = () => {
         </section>
       )}
       {appFooter}
+      </div>{/* end appContentRef */}
+
+      {/* Offline overlay — blocks all patient interaction when backend is unreachable */}
+      {!isBackendHealthy && (
+        <div
+          ref={offlineOverlayRef}
+          tabIndex={-1}
+          className="offline-overlay"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="offline-overlay-title"
+          aria-describedby="offline-overlay-desc"
+          aria-live="assertive"
+          onKeyDown={(e) => { if (e.key === "Tab") e.preventDefault(); }}
+        >
+          <WifiOff size={72} className="offline-overlay-icon" aria-hidden="true" />
+          <h2 id="offline-overlay-title" className="offline-overlay-title">
+            {uiText.offlineOverlayTitle}
+          </h2>
+          <p id="offline-overlay-desc" className="offline-overlay-description">
+            {uiText.offlineOverlayDescription}
+          </p>
+          <p className="offline-overlay-reconnecting" aria-live="polite">
+            {uiText.offlineOverlayReconnecting}
+          </p>
+        </div>
+      )}
+
+      {/* Settings auth modal — credential gate before opening the settings wizard */}
+      {isSettingsAuthOpen && (
+        <div className="popup-overlay" role="presentation">
+          <section
+            className="popup settings-auth-popup"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-auth-title"
+            aria-describedby="settings-auth-subtitle"
+          >
+            <div className="settings-auth-icon-row">
+              <Lock size={28} aria-hidden="true" className="settings-auth-icon" />
+            </div>
+            <h3 id="settings-auth-title">{uiText.settingsAuthTitle}</h3>
+            <p id="settings-auth-subtitle" className="settings-auth-subtitle">
+              {uiText.settingsAuthSubtitle}
+            </p>
+
+            {settingsAuthError && (
+              <div className="banner banner--error settings-auth-error" role="alert" aria-live="assertive">
+                {settingsAuthError}
+              </div>
+            )}
+
+            <form onSubmit={onSubmitSettingsAuth} className="settings-auth-form" autoComplete="off">
+              <label className="settings-auth-label">
+                {uiText.settingsAuthEmailLabel}
+                <input
+                  type="email"
+                  autoComplete="off"
+                  required
+                  disabled={isSettingsAuthSubmitting}
+                  value={settingsAuthEmail}
+                  onChange={(e) => setSettingsAuthEmail(e.target.value)}
+                  className="settings-auth-input"
+                />
+              </label>
+              <label className="settings-auth-label">
+                {uiText.settingsAuthPasswordLabel}
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  disabled={isSettingsAuthSubmitting}
+                  value={settingsAuthPassword}
+                  onChange={(e) => setSettingsAuthPassword(e.target.value)}
+                  className="settings-auth-input"
+                />
+              </label>
+              <div className="popup-actions settings-auth-actions">
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={onCancelSettingsAuth}
+                  disabled={isSettingsAuthSubmitting}
+                >
+                  {uiText.cancel}
+                </button>
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={isSettingsAuthSubmitting}
+                >
+                  <Lock size={15} aria-hidden="true" />
+                  {isSettingsAuthSubmitting ? uiText.settingsAuthVerifying : uiText.settingsAuthSubmit}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </main>
   );
 };
