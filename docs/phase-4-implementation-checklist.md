@@ -64,10 +64,10 @@ Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with requir
 ### 6) Remaining Phase 4 Work
 - [x] Real printing integration from Electron wrapper (silent/selected printer path)
 - [x] Device ID generation/display and persistence for kiosk enrollment flow
-- [ ] Protected config access path (Admin/IT/Manager credentials) for post-setup edits
+- [x] Protected config access path (Admin/IT/Manager credentials) for post-setup edits
 - [x] Contract alignment pass against finalized backend kiosk/ticket endpoints
   (covered by section 2 — HTTP provider aligned with full endpoint and field details documented there)
-- [ ] Add focused tests for configuration lifecycle and data-provider switching
+- [x] Add focused tests for configuration lifecycle and data-provider switching
 
 ## Latest Implemented Progress (Current Branch Work)
 - Added and hardened first-run config wizard.
@@ -82,7 +82,12 @@ Phase Goal: Deliver the kiosk channel as an Electron-wrapped web app with requir
 - Refined patient flow to one-decision-per-step behavior with card-based selection and reduced tap count.
 - Added local UX baseline instrumentation and in-settings KPI summary for operational baseline capture.
 - Hardened touch/accessibility behavior with larger minimum interactive targets, explicit focus-visible states, and ARIA live semantics for critical status surfaces.
+- Implemented protected settings access: credential modal (email + password) calls `POST /auth/login`; accepts only ADMIN/IT/MANAGER roles; maps error reasons to bilingual UI strings.
+- Removed mock data mode and `useMockApi` switch from all layers (provider, config, settings UI).
+- Added full-screen offline overlay (z-index 2000) with WifiOff icon, bilingual messaging, and pulsing reconnecting indicator; auto-recovery triggers data reload via health polling.
+- Added 30-second health-check polling interval (`HEALTH_POLL_INTERVAL_MS`) with auto data-reload on recovery.
+- Extracted config lifecycle utilities (`parseStoredConfig`, `readStoredConfig`, `saveConfig`, device-ID helpers) to `src/renderer/data/config.js` for testability.
+- Added Vitest test suite: 25 config lifecycle tests + 13 provider contract tests (38 total, all passing).
 
-## Next Recommended Slice
-1. Implement protected settings access flow (Admin/IT/Manager credentials) once backend auth endpoints are available.
-2. Add minimal focused tests for config lifecycle and data-provider switching paths.
+## Phase 4 Status: ✅ COMPLETE
+All planned items and next-slice items have been implemented and tested.

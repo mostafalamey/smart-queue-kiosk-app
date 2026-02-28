@@ -14,7 +14,8 @@
     "start": "electron .",
     "pack": "npm run icons:build && npm run build:web && electron-builder --dir",
     "dist": "npm run icons:build && npm run build:web && electron-builder",
-    "dist:win": "npm run icons:build && npm run build:web && electron-builder --win nsis"
+    "dist:win": "npm run icons:build && npm run build:web && electron-builder --win nsis",
+    "test": "vitest run"
   },
   "dependencies": {
     "lucide-react": "^0.575.0",
@@ -29,10 +30,12 @@
     "cross-env": "^7.0.3",
     "electron": "^37.2.3",
     "electron-builder": "^26.8.1",
+    "jsdom": "^28.1.0",
     "rcedit": "^4.0.1",
     "sharp": "^0.34.3",
     "to-ico": "^1.1.5",
     "vite": "^5.4.19",
+    "vitest": "^2.1.9",
     "wait-on": "^8.0.5"
   },
   "build": {
