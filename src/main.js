@@ -1,5 +1,14 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("node:path");
+const dotenv = require("dotenv");
+
+// Load API_BASE_URL (and other env overrides) for LAN / production deployments.
+// Resolution order (dotenv never overwrites already-set values):
+//   1. .env placed beside the .exe  — production: IT drops a .env next to the installer output.
+//   2. .env in process.cwd()        — development: project root .env / .env.example.
+dotenv.config({ path: path.join(path.dirname(process.execPath), ".env") });
+dotenv.config();
+
+const { app, BrowserWindow, ipcMain } = require("electron");
 const fs = require("node:fs");
 const QRCode = require("qrcode");
 
