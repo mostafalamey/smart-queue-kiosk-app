@@ -9,7 +9,7 @@ export default defineConfig({
   base: "./",
   plugins: [react()],
   server: {
-    port: 5173,
+    port: 5175,
     strictPort: true,
   },
 });

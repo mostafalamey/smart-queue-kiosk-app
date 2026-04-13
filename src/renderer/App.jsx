@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { createKioskDataProvider, getDefaultKioskConfig, HEALTH_POLL_INTERVAL_MS } from "./data/provider";
+import { createKioskDataProvider, getDefaultKioskConfig, HEALTH_POLL_INTERVAL_MS, checkKioskRegistration } from "./data/provider";
 import { createSettingsAccessController } from "./data/settings-access";
 import {
   readStoredConfig,
@@ -9,13 +9,21 @@ import {
 } from "./data/config";
 import {
   AlertTriangle,
+  Copy,
+  Check,
   Delete,
   CheckCircle2,
+  Eye,
+  EyeOff,
   Info,
   Languages,
   Lock,
+  MonitorOff,
   Printer,
+  RefreshCw,
+  ServerCrash,
   Settings,
+  ShieldAlert,
   Ticket,
   Wifi,
   WifiOff,
@@ -186,6 +194,22 @@ const PATIENT_UI_TEXT = {
     notAvailable: "N/A",
     startOverHint:
       "If printing still fails, press Start Over and ask reception to assist the patient.",
+    notRegisteredTitle: "Kiosk Not Registered",
+    notRegisteredTitleError: "Cannot Reach Server",
+    notRegisteredDescription:
+      "This kiosk has not been registered in the system. " +
+      "Please ask IT to register this device in the Admin app.",
+    notRegisteredDescriptionError:
+      "Could not connect to the server to verify this device. " +
+      "Check the network connection and try again.",
+    notRegisteredDeviceIdLabel: "Device ID",
+    notRegisteredDeviceIdHint: "Share this ID with IT to register this device.",
+    notRegisteredCopy: "Copy",
+    notRegisteredCopied: "Copied!",
+    notRegisteredRetry: "Retry",
+    notRegisteredChecking: "Checking…",
+    notRegisteredInstructions: "IT Setup: Admin app → User Experience → Mapping → Add Device, enter this ID with type Kiosk.",
+    notRegisteredLangToggle: "عربي",
   },
   ar: {
     stepDepartment: "القسم",
@@ -342,6 +366,22 @@ const PATIENT_UI_TEXT = {
     notAvailable: "غير متوفر",
     startOverHint:
       "إذا استمر فشل الطباعة، اضغط ابدأ من جديد واطلب من الاستقبال مساعدة المريض.",
+    notRegisteredTitle: "الكشك غير مسجّل",
+    notRegisteredTitleError: "تعذّر الوصول إلى الخادم",
+    notRegisteredDescription:
+      "لم يتم تسجيل هذا الكشك في النظام. " +
+      "يُرجى مطالبة مسؤول تقنية المعلومات بتسجيل هذا الجهاز في تطبيق الإدارة.",
+    notRegisteredDescriptionError:
+      "تعذّر الاتصال بالخادم للتحقق من هذا الجهاز. " +
+      "تحقق من اتصال الشبكة وأعد المحاولة.",
+    notRegisteredDeviceIdLabel: "معرّف الجهاز",
+    notRegisteredDeviceIdHint: "أرسل هذا المعرّف لفريق تقنية المعلومات لتسجيل الجهاز.",
+    notRegisteredCopy: "نسخ",
+    notRegisteredCopied: "تم النسخ!",
+    notRegisteredRetry: "إعادة المحاولة",
+    notRegisteredChecking: "جارٍ الفحص…",
+    notRegisteredInstructions: "إعداد تقنية المعلومات: تطبيق الإدارة ← تجربة المستخدم ← الربط ← إضافة جهاز، أدخل هذا المعرّف بنوع كشك.",
+    notRegisteredLangToggle: "English",
   },
 };
 
@@ -518,8 +558,15 @@ export const App = () => {
   const [isSettingsAuthOpen, setIsSettingsAuthOpen] = useState(false);
   const [settingsAuthEmail, setSettingsAuthEmail] = useState("");
   const [settingsAuthPassword, setSettingsAuthPassword] = useState("");
+  const [settingsAuthShowPassword, setSettingsAuthShowPassword] = useState(false);
   const [settingsAuthError, setSettingsAuthError] = useState(null);
   const [isSettingsAuthSubmitting, setIsSettingsAuthSubmitting] = useState(false);
+  // Registration check state: "checking" | "registered" | "unregistered" | "error"
+  const [registrationStatus, setRegistrationStatus] = useState("checking");
+  const [registrationNetworkError, setRegistrationNetworkError] = useState(false);
+  const [registrationLang, setRegistrationLang] = useState("en");
+  const [registrationCopied, setRegistrationCopied] = useState(false);
+  const registrationCopyTimerRef = useRef(null);
   const phoneInputRef = useRef(null);
   const prevBackendHealthyRef = useRef(null);
   const appContentRef = useRef(null);
@@ -650,6 +697,78 @@ export const App = () => {
     setIsConfigMode(true);
     setKioskConfig(getDefaultKioskConfig());
   }, []);
+
+  // Registration check: verify this kiosk device is registered in the backend
+  useEffect(() => {
+    let cancelled = false;
+    const deviceId = getOrCreateKioskDeviceId();
+    const baseUrl =
+      (readStoredConfig()?.apiBaseUrl) ||
+      window.kioskRuntime?.config?.apiBaseUrl ||
+      "http://localhost:3000";
+
+    setRegistrationStatus("checking");
+
+    checkKioskRegistration(deviceId, baseUrl).then(({ registered, error }) => {
+      if (cancelled) return;
+      if (registered) {
+        setRegistrationStatus("registered");
+        setRegistrationNetworkError(false);
+      } else if (error === "network") {
+        setRegistrationStatus("error");
+        setRegistrationNetworkError(true);
+      } else {
+        setRegistrationStatus("unregistered");
+        setRegistrationNetworkError(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const retryRegistration = useCallback(() => {
+    let cancelled = false;
+    const deviceId = getOrCreateKioskDeviceId();
+    const baseUrl =
+      (readStoredConfig()?.apiBaseUrl) ||
+      window.kioskRuntime?.config?.apiBaseUrl ||
+      "http://localhost:3000";
+
+    setRegistrationStatus("checking");
+
+    checkKioskRegistration(deviceId, baseUrl).then(({ registered, error }) => {
+      if (cancelled) return;
+      if (registered) {
+        setRegistrationStatus("registered");
+        setRegistrationNetworkError(false);
+      } else if (error === "network") {
+        setRegistrationStatus("error");
+        setRegistrationNetworkError(true);
+      } else {
+        setRegistrationStatus("unregistered");
+        setRegistrationNetworkError(false);
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleRegistrationCopy = useCallback(async () => {
+    const deviceId = getOrCreateKioskDeviceId();
+    if (!deviceId) return;
+    try {
+      await navigator.clipboard.writeText(deviceId);
+      setRegistrationCopied(true);
+      if (registrationCopyTimerRef.current) clearTimeout(registrationCopyTimerRef.current);
+      registrationCopyTimerRef.current = setTimeout(() => setRegistrationCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable — device ID is visible on screen */
+    }
+  }, []);
+
 
   const effectiveDepartmentId = useMemo(() => {
     if (isDepartmentLocked) {
@@ -1212,6 +1331,7 @@ export const App = () => {
       setIsSettingsAuthOpen(false);
       setSettingsAuthEmail("");
       setSettingsAuthPassword("");
+      setSettingsAuthShowPassword(false);
       setPreviousKioskConfig({ ...kioskConfig });
       setSettingsTab("general");
       setIsConfigMode(true);
@@ -1227,6 +1347,7 @@ export const App = () => {
     setIsSettingsAuthOpen(false);
     setSettingsAuthEmail("");
     setSettingsAuthPassword("");
+    setSettingsAuthShowPassword(false);
     setSettingsAuthError(null);
   };
 
@@ -1623,6 +1744,111 @@ export const App = () => {
 
   if (!kioskConfig) {
     return null;
+  }
+
+  // ── Device registration gate ────────────────────────────────────────────────
+  if (registrationStatus === "checking" || registrationStatus === "unregistered" || registrationStatus === "error") {
+    const rtNotReg = registrationLang === "ar";
+    const tNR = PATIENT_UI_TEXT[registrationLang];
+    const deviceId = getOrCreateKioskDeviceId();
+    const isError = registrationStatus === "error";
+    const isChecking = registrationStatus === "checking";
+    const NRIcon = isError ? ServerCrash : MonitorOff;
+    const nrIconColour = isError
+      ? { background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", color: "rgb(239,68,68)" }
+      : { background: "rgba(234,179,8,0.12)", border: "1px solid rgba(234,179,8,0.3)", color: "rgb(234,179,8)" };
+
+    return (
+      <div
+        dir={rtNotReg ? "rtl" : "ltr"}
+        style={{
+          position: "fixed", inset: 0, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", background: "var(--color-background, #0a0a0a)",
+          color: "var(--color-foreground, #fafafa)", fontFamily: "inherit",
+        }}
+      >
+        {/* Language toggle */}
+        <button
+          type="button"
+          onClick={() => setRegistrationLang((l) => (l === "en" ? "ar" : "en"))}
+          style={{
+            position: "absolute", top: 16, right: 16, display: "flex", alignItems: "center",
+            gap: 6, padding: "6px 10px", borderRadius: 6, border: "none", background: "transparent",
+            color: "rgba(250,250,250,0.5)", cursor: "pointer", fontSize: 12,
+          }}
+          aria-label="Toggle language"
+        >
+          <span>{tNR.notRegisteredLangToggle}</span>
+        </button>
+
+        <div style={{ width: "100%", maxWidth: 360, padding: "0 16px" }}>
+          {/* Icon + heading */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 24 }}>
+            <div style={{ width: 48, height: 48, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 12, ...nrIconColour }}>
+              <NRIcon size={22} />
+            </div>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, textAlign: "center" }}>
+              {isChecking ? tNR.notRegisteredChecking : isError ? tNR.notRegisteredTitleError : tNR.notRegisteredTitle}
+            </h1>
+            {!isChecking && (
+              <p style={{ margin: 0, fontSize: 13, color: "rgba(250,250,250,0.6)", textAlign: "center" }}>
+                {isError ? tNR.notRegisteredDescriptionError : tNR.notRegisteredDescription}
+              </p>
+            )}
+          </div>
+
+          {/* Device ID card */}
+          {!isChecking && (
+            <div style={{ borderRadius: 12, border: "1px solid rgba(250,250,250,0.1)", background: "rgba(250,250,250,0.04)", padding: 20, marginBottom: 16 }}>
+              <p style={{ margin: "0 0 6px", fontSize: 11, color: "rgba(250,250,250,0.5)", fontWeight: 500 }}>
+                {tNR.notRegisteredDeviceIdLabel}
+              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <code style={{ flex: 1, background: "rgba(250,250,250,0.06)", borderRadius: 6, padding: "10px 14px", fontFamily: "monospace", fontSize: 13, color: "rgba(250,250,250,0.9)", overflowX: "hidden", textOverflow: "ellipsis", userSelect: "all" }}>
+                  {deviceId || "—"}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => { void handleRegistrationCopy(); }}
+                  disabled={!deviceId}
+                  aria-label={registrationCopied ? tNR.notRegisteredCopied : tNR.notRegisteredCopy}
+                  title={registrationCopied ? tNR.notRegisteredCopied : tNR.notRegisteredCopy}
+                  style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, border: `1.5px solid ${registrationCopied ? "rgba(34,197,94,0.7)" : "rgba(250,250,250,0.55)"}`, background: registrationCopied ? "rgba(34,197,94,0.15)" : "rgba(250,250,250,0.12)", color: registrationCopied ? "rgb(74,222,128)" : "#ffffff", cursor: "pointer", flexShrink: 0 }}
+                >
+                  {registrationCopied ? <Check size={20} /> : <Copy size={20} />}
+                </button>
+              </div>
+              <p style={{ margin: "8px 0 0", fontSize: 10, color: "rgba(250,250,250,0.4)" }}>
+                {tNR.notRegisteredDeviceIdHint}
+              </p>
+            </div>
+          )}
+
+          {/* IT instructions */}
+          {!isChecking && !isError && (
+            <div style={{ borderRadius: 8, border: "1px solid rgba(59,130,246,0.2)", background: "rgba(59,130,246,0.05)", padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <ShieldAlert size={13} style={{ marginTop: 2, flexShrink: 0, color: "rgb(96,165,250)" }} />
+              <p style={{ margin: 0, fontSize: 11, lineHeight: 1.6, color: "rgb(96,165,250)" }}>
+                {tNR.notRegisteredInstructions}
+              </p>
+            </div>
+          )}
+
+          {/* Retry button */}
+          <button
+            type="button"
+            onClick={retryRegistration}
+            disabled={isChecking}
+            style={{ width: "100%", padding: "10px 16px", borderRadius: 8, border: "1px solid rgba(250,250,250,0.15)", background: "transparent", color: "rgba(250,250,250,0.85)", cursor: isChecking ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 14, opacity: isChecking ? 0.6 : 1 }}
+          >
+            <RefreshCw size={14} style={{ animation: isChecking ? "spin 1s linear infinite" : "none" }} />
+            {isChecking ? tNR.notRegisteredChecking : tNR.notRegisteredRetry}
+          </button>
+        </div>
+
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
   }
 
   if (isConfigMode) {
@@ -2398,15 +2624,27 @@ export const App = () => {
               </label>
               <label className="settings-auth-label">
                 {uiText.settingsAuthPasswordLabel}
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  disabled={isSettingsAuthSubmitting}
-                  value={settingsAuthPassword}
-                  onChange={(e) => setSettingsAuthPassword(e.target.value)}
-                  className="settings-auth-input"
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={settingsAuthShowPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    required
+                    disabled={isSettingsAuthSubmitting}
+                    value={settingsAuthPassword}
+                    onChange={(e) => setSettingsAuthPassword(e.target.value)}
+                    className="settings-auth-input"
+                    style={{ paddingRight: "2.75rem" }}
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-label={settingsAuthShowPassword ? "Hide password" : "Show password"}
+                    onClick={() => setSettingsAuthShowPassword((v) => !v)}
+                    className="settings-auth-password-toggle"
+                  >
+                    {settingsAuthShowPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </label>
               <div className="popup-actions settings-auth-actions">
                 <button

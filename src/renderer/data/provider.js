@@ -122,3 +122,29 @@ const createHttpProvider = (baseUrl, language = "en") => {
 export const createKioskDataProvider = (config) => {
   return createHttpProvider(config?.apiBaseUrl || "http://localhost:3000", config?.language || "en");
 };
+
+/**
+ * Checks whether this kiosk device is registered in the backend.
+ *
+ * @param {string} deviceId
+ * @param {string} baseUrl
+ * @returns {Promise<{ registered: boolean, error: string|null }>}
+ */
+export const checkKioskRegistration = async (deviceId, baseUrl) => {
+  const base = (baseUrl || "http://localhost:3000").replace(/\/$/, "");
+  try {
+    const response = await fetch(
+      `${base}/kiosk/status?deviceId=${encodeURIComponent(deviceId)}`,
+      { method: "GET", headers: { Accept: "application/json" } }
+    );
+    if (response.ok) {
+      return { registered: true, error: null };
+    }
+    if (response.status === 404) {
+      return { registered: false, error: null };
+    }
+    return { registered: false, error: `Server error (HTTP ${response.status})` };
+  } catch {
+    return { registered: false, error: "network" };
+  }
+};
